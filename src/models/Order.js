@@ -20,10 +20,14 @@ const orderSchema = mongoose.Schema(
       type: Number,
       required: true,
     },
+    paymentMethod: {
+      type: String,
+      default: 'Stripe',
+    },
     status: {
       type: String,
-      enum: ['Pending', 'Completed', 'Cancelled'],
-      default: 'Pending',
+      enum: ['Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refunded'],
+      default: 'Processing',
     },
   },
   {

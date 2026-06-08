@@ -86,18 +86,24 @@ const createProduct = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Product with this SKU already exists' });
     }
 
-    const product = await Product.create({
+    const productData = {
       name,
       sku,
       price,
       stock: stock || 0,
-      category,
       status: status || 'Pending',
       mainImage,
       gallery: gallery || [],
       tags: tags || [],
       seller: req.user._id,
-    });
+    };
+
+    // Only add category if it's not a placeholder "string" and has length
+    if (category && category !== 'string') {
+      productData.category = category;
+    }
+
+    const product = await Product.create(productData);
 
     res.status(201).json({
       success: true,
