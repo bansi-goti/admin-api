@@ -18,6 +18,7 @@ const loginUser = async (req, res, next) => {
     const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
+      console.log('Login failed: User not found for email:', email);
       res.status(401);
       throw new Error('Invalid credentials');
     }
@@ -26,6 +27,7 @@ const loginUser = async (req, res, next) => {
     const isMatch = await user.matchPassword(password);
 
     if (!isMatch) {
+      console.log('Login failed: Password mismatch for email:', email);
       res.status(401);
       throw new Error('Invalid credentials');
     }
