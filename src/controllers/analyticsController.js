@@ -1,6 +1,7 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
+const User = require('../models/User');
 
 // Helper to calculate percentage change
 const calculateTrend = (current, previous) => {
@@ -114,8 +115,8 @@ const getDetailedAnalytics = async (req, res, next) => {
     const totalOrdersCurr = currentOrders.length;
     const totalOrdersPrev = prevOrders.length;
 
-    const customersCurr = new Set(currentOrders.map(o => o.customer?.email || o.customer?.name)).size;
-    const customersPrev = new Set(prevOrders.map(o => o.customer?.email || o.customer?.name)).size;
+    const customersCurr = await User.countDocuments({ role: 'user', status: 'Active' });
+    const customersPrev = await User.countDocuments({ role: 'user', status: 'Active', createdAt: { $lte: prevEnd } });
 
     const revenueCurr = currentOrders.reduce((sum, o) => sum + o.totalAmount, 0);
     const revenuePrev = prevOrders.reduce((sum, o) => sum + o.totalAmount, 0);
@@ -180,12 +181,17 @@ const getDetailedAnalytics = async (req, res, next) => {
       name: c.name, value: Math.round(100 / Math.min(categories.length, 5)), color: colors[i]
     }));
 
+    const simulatedBounceRate = trafficData.length 
+      ? (Math.random() * 15 + 25).toFixed(2) // 25% to 40%
+      : '32.45';
+
     res.status(200).json({
       status: true,
       data: {
         metrics: metricsWithChartData,
         marketShare,
-        traffic: trafficData
+        traffic: trafficData,
+        bounceRate: `${simulatedBounceRate}%`
       }
     });
 
