@@ -81,7 +81,28 @@ const registerUser = async (req, res, next) => {
   }
 };
 
+// @desc    Get user profile
+// @route   GET /api/auth/profile
+// @access  Private
+const getProfile = async (req, res, next) => {
+  try {
+    const user = req.user; // populated by protect middleware
+    res.json({
+      code: 200,
+      _id: user._id,
+      email: user.email,
+      name: user.name || (user.role === 'admin' ? 'Admin' : 'Seller'),
+      role: user.role,
+      uiRole: user.uiRole || (user.role === 'admin' ? 'manager' : 'seller'),
+      profileImage: user.profileImage || null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   loginUser,
   registerUser,
+  getProfile,
 };

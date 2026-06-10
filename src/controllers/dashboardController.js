@@ -64,6 +64,7 @@ const getDashboardStats = async (req, res, next) => {
     const [
       totalOrdersCurrent, prevTotalOrders,
       totalProductsOverall, prevTotalProducts,
+      outOfStockProducts,
       totalSellersCurrent, prevTotalSellers,
       pendingOrdersCurrent, prevPendingOrders,
       completedOrdersCurrent, cancelledOrdersCurrent,
@@ -75,21 +76,42 @@ const getDashboardStats = async (req, res, next) => {
       Order.countDocuments(previousIntervalQuery),
       Product.countDocuments(baseQuery), // Product count is always overall catalog
       Product.countDocuments(timeframe === 'all' ? { createdAt: { $lt: new Date(0) } } : { ...baseQuery, createdAt: { $lte: endOfPrevious } }),
+      Product.countDocuments({ ...baseQuery, stock: { $lte: 0 } }),
       User.countDocuments(userCurrentIntervalQuery),
       User.countDocuments(userPreviousIntervalQuery),
       Order.countDocuments({ ...currentIntervalQuery, status: 'Pending' }),
       Order.countDocuments({ ...previousIntervalQuery, status: 'Pending' }),
       Order.countDocuments({ ...currentIntervalQuery, status: 'Completed' }),
       Order.countDocuments({ ...currentIntervalQuery, status: 'Cancelled' }),
-      Order.find(currentIntervalQuery),
+      Order.find(currentIntervalQuery).populate({ path: 'items.product', populate: { path: 'category' } }),
       Order.find(previousIntervalQuery),
       Product.find(baseQuery).sort({ sales: -1 }).limit(5),
-      Order.find(currentIntervalQuery).sort({ createdAt: -1 }).limit(5)
+      Order.find(currentIntervalQuery).sort({ createdAt: -1 }).limit(5).populate('items.product')
     ]);
 
-    // Revenue
+    // Revenue & Profit
     const totalRevenueCurrent = ordersCurrent.reduce((acc, order) => acc + order.totalAmount, 0);
     const totalRevenuePrev = ordersPrevious.reduce((acc, order) => acc + order.totalAmount, 0);
+
+    const totalProfitCurrent = ordersCurrent.reduce((acc, order) => {
+      const p = role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);
+      return acc + p;
+    }, 0);
+    const totalProfitPrev = ordersPrevious.reduce((acc, order) => {
+      const p = role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);
+      return acc + p;
+    }, 0);
+
+    const netAmountReceived = ordersCurrent.filter(o => o.status === 'Delivered').reduce((acc, o) => acc + (o.sellerEarning || 0), 0);
+    const pendingAmount = ordersCurrent.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').reduce((acc, o) => acc + (o.sellerEarning || 0), 0);
+
+    // Items Sold
+    const itemsSoldCurrent = ordersCurrent.reduce((acc, order) => {
+      return acc + (order.items ? order.items.reduce((sum, item) => sum + item.quantity, 0) : 0);
+    }, 0);
+    const itemsSoldPrev = ordersPrevious.reduce((acc, order) => {
+      return acc + (order.items ? order.items.reduce((sum, item) => sum + item.quantity, 0) : 0);
+    }, 0);
 
     // Unique Customers
     const uniqueCustomersCurrent = new Set(ordersCurrent.map(order => order.customer.name)).size;
@@ -102,24 +124,60 @@ const getDashboardStats = async (req, res, next) => {
     // Trends
     const trends = {
       revenue: formatTrend(calculateTrend(totalRevenueCurrent, totalRevenuePrev)),
+      profit: formatTrend(calculateTrend(totalProfitCurrent, totalProfitPrev)),
       orders: formatTrend(calculateTrend(totalOrdersCurrent, prevTotalOrders)),
       products: formatTrend(calculateTrend(totalProductsOverall, prevTotalProducts)),
       customers: formatTrend(calculateTrend(uniqueCustomersCurrent, uniqueCustomersPrev)),
       subadmins: formatTrend(calculateTrend(totalSellersCurrent, prevTotalSellers)),
       pending: formatTrend(calculateTrend(pendingOrdersCurrent, prevPendingOrders)),
-      aov: formatTrend(calculateTrend(currentAOV, prevAOV))
+      aov: formatTrend(calculateTrend(currentAOV, prevAOV)),
+      itemsSold: formatTrend(calculateTrend(itemsSoldCurrent, itemsSoldPrev))
     };
 
     // Chart Data Generation
     const revenueByInterval = {};
+    const profitByInterval = {};
     const ordersByInterval = {};
     const revenueTrendArray = [];
+    const profitTrendArray = [];
     const ordersTrendArray = [];
+    const barChartArray = [];
 
+    const categoryMap = {}; // For category doughnut chart
+
+    ordersCurrent.forEach(order => {
+      // Category aggregation
+      if (order.items) {
+        order.items.forEach(item => {
+          if (item.product && item.product.category) {
+            const catName = item.product.category.name || 'Uncategorized';
+            if (!categoryMap[catName]) categoryMap[catName] = 0;
+            categoryMap[catName] += item.price * item.quantity;
+          }
+        });
+      }
+    });
+
+    const colors = ['#f59e0b', '#3b82f6', '#10b981', '#ec4899', '#8b5cf6'];
+    const totalCategoryRevenue = Object.values(categoryMap).reduce((a, b) => a + b, 0);
+    const categoryData = Object.keys(categoryMap).map((catName, idx) => {
+      const val = categoryMap[catName];
+      const percent = totalCategoryRevenue > 0 ? ((val / totalCategoryRevenue) * 100).toFixed(1) + '%' : '0%';
+      return {
+        name: catName,
+        value: val,
+        displayValue: `₹${val.toLocaleString('en-IN')}`,
+        percent,
+        color: colors[idx % colors.length]
+      };
+    }).sort((a, b) => b.value - a.value).slice(0, 5); // top 5 categories
+
+    // Chart interval logic
     if (timeframe === 'today') {
       for (let i = 0; i <= now.getHours(); i++) {
         const key = i < 10 ? `0${i}:00` : `${i}:00`;
         revenueByInterval[key] = 0;
+        profitByInterval[key] = 0;
         ordersByInterval[key] = 0;
       }
       ordersCurrent.forEach(order => {
@@ -127,6 +185,7 @@ const getDashboardStats = async (req, res, next) => {
         const key = h < 10 ? `0${h}:00` : `${h}:00`;
         if (revenueByInterval[key] !== undefined) {
           revenueByInterval[key] += order.totalAmount;
+          profitByInterval[key] += role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);
           ordersByInterval[key] += 1;
         }
       });
@@ -134,12 +193,14 @@ const getDashboardStats = async (req, res, next) => {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       for (let i = 0; i <= now.getMonth(); i++) {
         revenueByInterval[months[i]] = 0;
+        profitByInterval[months[i]] = 0;
         ordersByInterval[months[i]] = 0;
       }
       ordersCurrent.forEach(order => {
         const m = new Date(order.createdAt).getMonth();
         if (revenueByInterval[months[m]] !== undefined) {
           revenueByInterval[months[m]] += order.totalAmount;
+          profitByInterval[months[m]] += role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);
           ordersByInterval[months[m]] += 1;
         }
       });
@@ -148,9 +209,11 @@ const getDashboardStats = async (req, res, next) => {
         const y = new Date(order.createdAt).getFullYear().toString();
         if (revenueByInterval[y] === undefined) {
           revenueByInterval[y] = 0;
+          profitByInterval[y] = 0;
           ordersByInterval[y] = 0;
         }
         revenueByInterval[y] += order.totalAmount;
+        profitByInterval[y] += role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);
         ordersByInterval[y] += 1;
       });
     } else {
@@ -159,19 +222,22 @@ const getDashboardStats = async (req, res, next) => {
         const d = new Date(now.getFullYear(), now.getMonth(), i);
         const key = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
         revenueByInterval[key] = 0;
+        profitByInterval[key] = 0;
         ordersByInterval[key] = 0;
       }
       ordersCurrent.forEach(order => {
         const key = new Date(order.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
         if (revenueByInterval[key] !== undefined) {
           revenueByInterval[key] += order.totalAmount;
+          profitByInterval[key] += role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);
           ordersByInterval[key] += 1;
         }
       });
     }
 
     for (const [key, value] of Object.entries(revenueByInterval)) {
-      revenueTrendArray.push({ name: key, value });
+      revenueTrendArray.push({ name: key, revenue: value, profit: profitByInterval[key] });
+      barChartArray.push({ name: key, date: key, revenue: value, profit: profitByInterval[key] });
     }
     for (const [key, value] of Object.entries(ordersByInterval)) {
       ordersTrendArray.push({ name: key, value });
@@ -182,36 +248,62 @@ const getDashboardStats = async (req, res, next) => {
       id: p._id,
       name: p.name,
       code: p.code,
-      sales: p.sales || 0,
-      image: p.image || null
+      orders: p.sales || 0,
+      price: `₹${(p.price || 0).toLocaleString('en-IN')}`,
+      img: p.mainImage || 'https://via.placeholder.com/100'
     }));
 
     // Formatting Recent Orders
-    const recentOrders = recentOrdersData.map(order => ({
-      _id: order._id,
-      orderId: order.orderId,
-      customer: order.customer.name,
-      amount: order.totalAmount,
-      status: order.status,
-    }));
+    const recentOrders = recentOrdersData.map(order => {
+      const firstItem = (order.items && order.items.length > 0) ? order.items[0] : null;
+      let productStr = 'N/A';
+      let img = 'https://via.placeholder.com/100';
+      let qty = 1;
+
+      if (firstItem && firstItem.product) {
+        productStr = firstItem.product.name;
+        img = firstItem.product.mainImage || img;
+        qty = firstItem.quantity;
+      }
+
+      return {
+        id: order.orderId,
+        customer: order.customer.name,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(order.customer.name)}&background=random`,
+        product: productStr,
+        img: img,
+        qty: qty,
+        amount: `₹${(order.totalAmount || 0).toLocaleString('en-IN')}`,
+        earning: `₹${(order.sellerEarning || 0).toLocaleString('en-IN')}`,
+        status: order.status,
+        date: new Date(order.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      };
+    });
 
     res.json({
       code: 200,
       stats: {
         totalRevenue: totalRevenueCurrent,
+        totalProfit: totalProfitCurrent,
         totalOrders: totalOrdersCurrent,
         totalProducts: totalProductsOverall,
+        outOfStockProducts: outOfStockProducts,
         totalCustomers: uniqueCustomersCurrent,
         totalSellers: totalSellersCurrent,
         pendingOrders: pendingOrdersCurrent,
         completedOrders: completedOrdersCurrent,
         cancelledOrders: cancelledOrdersCurrent,
-        averageOrderValue: currentAOV,
+        averageOrderValue: Math.round(currentAOV),
+        itemsSold: itemsSoldCurrent,
+        netAmountReceived: netAmountReceived,
+        pendingAmount: pendingAmount,
       },
       trends,
       chartData: {
         revenueTrend: revenueTrendArray,
-        ordersTrend: ordersTrendArray
+        ordersTrend: ordersTrendArray,
+        barChart: barChartArray,
+        categoryData: categoryData
       },
       topProducts,
       recentOrders,

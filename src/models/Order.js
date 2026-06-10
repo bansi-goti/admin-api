@@ -16,9 +16,28 @@ const orderSchema = mongoose.Schema(
       name: { type: String, required: true },
       email: { type: String },
     },
+    items: [
+      {
+        product: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Product',
+          required: true,
+        },
+        quantity: { type: Number, required: true },
+        price: { type: Number, required: true },
+      }
+    ],
     totalAmount: {
       type: Number,
       required: true,
+    },
+    sellerEarning: {
+      type: Number,
+      default: 0,
+    },
+    profit: {
+      type: Number,
+      default: 0,
     },
     paymentMethod: {
       type: String,

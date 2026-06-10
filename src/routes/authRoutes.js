@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { loginUser, registerUser } = require('../controllers/authController');
+const { loginUser, registerUser, getProfile } = require('../controllers/authController');
+const { protect } = require('../middlewares/authMiddleware');
 
 /**
  * @swagger
@@ -8,6 +9,20 @@ const { loginUser, registerUser } = require('../controllers/authController');
  *   name: Auth
  *   description: Authentication operations
  */
+
+/**
+ * @swagger
+ * /api/auth/profile:
+ *   get:
+ *     summary: Get current logged in user profile
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile data
+ */
+router.get('/profile', protect, getProfile);
 
 /**
  * @swagger
