@@ -149,8 +149,8 @@ const getDashboardStats = async (req, res, next) => {
       // Category aggregation
       if (order.items) {
         order.items.forEach(item => {
-          if (item.product && item.product.category) {
-            const catName = item.product.category.name || 'Uncategorized';
+          if (item.product) {
+            const catName = (item.product.category && item.product.category.name) ? item.product.category.name : 'Uncategorized';
             if (!categoryMap[catName]) categoryMap[catName] = 0;
             categoryMap[catName] += item.price * item.quantity;
           }
@@ -218,15 +218,16 @@ const getDashboardStats = async (req, res, next) => {
       });
     } else {
       // Monthly
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       for (let i = 1; i <= now.getDate(); i++) {
-        const d = new Date(now.getFullYear(), now.getMonth(), i);
-        const key = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        const key = `${i < 10 ? '0'+i : i} ${monthNames[now.getMonth()]}`;
         revenueByInterval[key] = 0;
         profitByInterval[key] = 0;
         ordersByInterval[key] = 0;
       }
       ordersCurrent.forEach(order => {
-        const key = new Date(order.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        const d = new Date(order.createdAt);
+        const key = `${d.getDate() < 10 ? '0'+d.getDate() : d.getDate()} ${monthNames[d.getMonth()]}`;
         if (revenueByInterval[key] !== undefined) {
           revenueByInterval[key] += order.totalAmount;
           profitByInterval[key] += role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);

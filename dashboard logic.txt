@@ -1,0 +1,9 @@
+| Metric           | Current (Today) | Previous Period | Formula                         |        Result |
+| ---------------- | --------------: | --------------: | ------------------------------- | ------------: |
+| Total Revenue    |         ₹28,000 |         ₹12,000 | ((28000 - 12000) / 12000) × 100 | ↑ 133.33% |
+| Total Orders     |               1 |               1 | ((1 - 1) / 1) × 100             |      ↑ 0% |
+| Total Products   |               5 |               5 | ((5 - 5) / 5) × 100             |      ↑ 0% |
+| Total Customers  |               1 |               1 | ((1 - 1) / 1) × 100             |      ↑ 0% |
+| Total Sub Admins |               0 |               1 | ((0 - 1) / 1) × 100             |    ↓ 100% |
+| Active Sellers   |               0 |               1 | ((0 - 1) / 1) × 100             |    ↓ 100% |
+| Pending Orders   |               0 |               0 | Division by 0 (custom logic)    |        0% |
