@@ -3,12 +3,21 @@ const {
   getAllProducts,
   getProductById,
   createProduct,
+  updateProduct,
   updateProductStatus,
   deleteProduct,
 } = require('../controllers/productController');
 const { protect } = require('../middlewares/authMiddleware');
+const upload = require('../middlewares/uploadMiddleware');
 
 const router = express.Router();
+
+const productUpload = upload.fields([
+  { name: 'mainImage', maxCount: 1 },
+  { name: 'gallery', maxCount: 10 },
+  { name: 'threeSixtyImages', maxCount: 50 },
+  { name: 'video', maxCount: 1 }
+]);
 
 /**
  * @swagger
@@ -97,7 +106,7 @@ router.route('/').get(protect, getAllProducts);
  *       400:
  *         description: Product with SKU already exists
  */
-router.route('/').post(protect, createProduct);
+router.route('/').post(protect, productUpload, createProduct);
 
 /**
  * @swagger
@@ -173,6 +182,9 @@ router.route('/:id/status').patch(protect, updateProductStatus);
  *       404:
  *         description: Product not found
  */
-router.route('/:id').delete(protect, deleteProduct);
+router.route('/:id')
+  .get(protect, getProductById)
+  .put(protect, productUpload, updateProduct)
+  .delete(protect, deleteProduct);
 
 module.exports = router;

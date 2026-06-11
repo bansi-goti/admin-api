@@ -10,8 +10,8 @@ const getAllCategories = async (req, res) => {
     const limit = parseInt(req.query.page_size) || 10;
     const search = req.query.search || '';
 
-    // Build query
-    const query = { seller: req.user._id };
+    // Build query (return all categories for product assignment)
+    const query = {};
     if (search) {
       query.name = { $regex: search, $options: 'i' };
     }

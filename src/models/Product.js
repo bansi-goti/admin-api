@@ -11,6 +11,9 @@ const productSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Category',
     },
+    subcategory: {
+      type: String,
+    },
     name: {
       type: String,
       required: [true, 'Please add a product name'],

@@ -46,6 +46,11 @@ const getAllProducts = async (req, res, next) => {
 // @access  Private
 const getProductById = async (req, res, next) => {
   try {
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ success: false, message: 'Product not found (Invalid ID format)' });
+    }
+
     const product = await Product.findById(req.params.id)
       .populate('seller', 'name email username fullName')
       .populate('category', 'name');
@@ -72,13 +77,17 @@ const createProduct = async (req, res, next) => {
       name,
       sku,
       price,
+      basePrice,
       stock,
+      totalStock,
       category,
+      subcategory,
       status,
-      mainImage,
-      gallery,
       tags
     } = req.body;
+
+    const actualPrice = price || basePrice;
+    const actualStock = stock || totalStock || 0;
 
     // Check if product with SKU already exists
     const existingProduct = await Product.findOne({ sku: { $regex: new RegExp(`^${sku}$`, 'i') } });
@@ -86,16 +95,32 @@ const createProduct = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Product with this SKU already exists' });
     }
 
+    let mainImagePath = '';
+    if (req.files && req.files['mainImage']) {
+      mainImagePath = `/uploads/${req.files['mainImage'][0].filename}`;
+    }
+
+    let galleryPaths = [];
+    if (req.files && req.files['gallery']) {
+      galleryPaths = req.files['gallery'].map(file => `/uploads/${file.filename}`);
+    }
+
+    let parsedTags = [];
+    if (tags) {
+      parsedTags = typeof tags === 'string' ? tags.split(',').map(t => t.trim()) : tags;
+    }
+
     const productData = {
       name,
       sku,
-      price,
-      stock: stock || 0,
+      price: actualPrice,
+      stock: actualStock,
       status: status || 'Pending',
-      mainImage,
-      gallery: gallery || [],
-      tags: tags || [],
+      mainImage: mainImagePath,
+      gallery: galleryPaths,
+      tags: parsedTags,
       seller: req.user._id,
+      subcategory
     };
 
     // Only add category if it's not a placeholder "string" and has length
@@ -169,10 +194,82 @@ const deleteProduct = async (req, res, next) => {
   }
 };
 
+// @desc    Update product
+// @route   PUT /api/products/:id
+// @access  Private
+const updateProduct = async (req, res, next) => {
+  try {
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ success: false, message: 'Product not found (Invalid ID format)' });
+    }
+
+    const {
+      name,
+      sku,
+      price,
+      basePrice,
+      stock,
+      totalStock,
+      category,
+      subcategory,
+      status,
+      tags
+    } = req.body;
+
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // Update fields
+    if (name) product.name = name;
+    if (sku) product.sku = sku;
+    
+    const actualPrice = price || basePrice;
+    if (actualPrice !== undefined) product.price = actualPrice;
+
+    const actualStock = stock || totalStock;
+    if (actualStock !== undefined) product.stock = actualStock;
+
+    if (status) product.status = status;
+    if (subcategory !== undefined) product.subcategory = subcategory;
+
+    if (category && category !== 'string') {
+      product.category = category;
+    }
+
+    // Process files
+    if (req.files && req.files['mainImage']) {
+      product.mainImage = `/uploads/${req.files['mainImage'][0].filename}`;
+    }
+
+    if (req.files && req.files['gallery']) {
+      product.gallery = req.files['gallery'].map(file => `/uploads/${file.filename}`);
+    }
+
+    if (tags) {
+      product.tags = typeof tags === 'string' ? tags.split(',').map(t => t.trim()) : tags;
+    }
+
+    const updatedProduct = await product.save();
+
+    res.status(200).json({
+      success: true,
+      data: updatedProduct,
+      message: 'Product updated successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllProducts,
   getProductById,
   createProduct,
+  updateProduct,
   updateProductStatus,
   deleteProduct,
 };
