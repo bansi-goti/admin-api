@@ -51,6 +51,94 @@ const productSchema = mongoose.Schema(
       type: [String],
       default: [],
     },
+    productId: {
+      type: String,
+    },
+    productType: {
+      type: String,
+      default: 'simple',
+    },
+    description: {
+      type: String,
+    },
+    barcode: {
+      type: String,
+    },
+    costPrice: {
+      type: Number,
+    },
+    discountPrice: {
+      type: Number,
+    },
+    discountPercentage: {
+      type: Number,
+      default: 0,
+    },
+    commission: {
+      type: Number,
+    },
+    lowStockAlert: {
+      type: Number,
+    },
+    weight: {
+      type: Number,
+    },
+    metaTitle: {
+      type: String,
+    },
+    metaDescription: {
+      type: String,
+    },
+    focusKeyword: {
+      type: String,
+    },
+    enableInternationalPricing: {
+      type: Boolean,
+      default: false,
+    },
+    enableInternationalShipping: {
+      type: Boolean,
+      default: false,
+    },
+    shippingType: {
+      type: String,
+      default: 'free',
+    },
+    variants: {
+      type: Array,
+      default: [],
+    },
+    countryPricing: {
+      type: Array,
+      default: [],
+    },
+    countryShipping: {
+      type: Array,
+      default: [],
+    },
+    videoUrl: {
+      type: String,
+    },
+    enable360: {
+      type: Boolean,
+      default: false,
+    },
+    threeSixtyImages: {
+      type: [String],
+      default: [],
+    },
+    showOnHomepage: {
+      type: Boolean,
+      default: false,
+    },
+    isFeatured: {
+      type: Boolean,
+      default: false,
+    },
+    isTrending: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

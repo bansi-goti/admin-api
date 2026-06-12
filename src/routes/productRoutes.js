@@ -6,6 +6,7 @@ const {
   updateProduct,
   updateProductStatus,
   deleteProduct,
+  bulkCreateProducts,
 } = require('../controllers/productController');
 const { protect } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/uploadMiddleware');
@@ -107,6 +108,9 @@ router.route('/').get(protect, getAllProducts);
  *         description: Product with SKU already exists
  */
 router.route('/').post(protect, productUpload, createProduct);
+
+router.route('/bulk').post(protect, bulkCreateProducts);
+
 
 /**
  * @swagger

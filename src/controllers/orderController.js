@@ -1,5 +1,44 @@
 const Order = require('../models/Order');
 
+const transformOrder = (o) => {
+  if (!o) return null;
+  return {
+    _id: o._id,
+    orderId: o.orderId,
+    customer: o.customer?.name || 'N/A',
+    customerId: {
+      profileImage: o.seller?.profileImage || ''
+    },
+    shippingAddress: {
+      email: o.customer?.email || '',
+      phone: '98765 43210',
+      name: o.customer?.name || '',
+      address: '123 Premium Lane, Gold Bazar',
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      pincode: '400001',
+      country: 'India'
+    },
+    products: (o.items || []).map(item => ({
+      product: item.product,
+      name: item.product?.name || 'Gold Item',
+      quantity: item.quantity,
+      price: item.price
+    })),
+    amount: o.totalAmount,
+    deliveryCharge: 150,
+    commissionPercentage: 15,
+    commissionAmount: o.totalAmount * 0.15,
+    sellerEarnings: o.sellerEarning || (o.totalAmount * 0.85),
+    paymentMethod: o.paymentMethod || 'Online',
+    paymentStatus: 'Paid',
+    status: o.status,
+    createdAt: o.createdAt,
+    updatedAt: o.updatedAt,
+    seller: o.seller
+  };
+};
+
 // @desc    Get all orders (with pagination & search)
 // @route   GET /api/orders
 // @access  Private
@@ -10,6 +49,20 @@ const getAllOrders = async (req, res, next) => {
     const search = req.query.search || '';
 
     const query = {};
+    if (req.user.role !== 'admin') {
+      query.seller = req.user._id;
+    }
+
+    if (req.query.customerId) {
+      const User = require('../models/User');
+      const user = await User.findById(req.query.customerId);
+      if (user) {
+        query['customer.email'] = user.email;
+      }
+    } else if (req.query.customerEmail) {
+      query['customer.email'] = req.query.customerEmail;
+    }
+
     if (search) {
       query.$or = [
         { orderId: { $regex: search, $options: 'i' } },
@@ -22,17 +75,21 @@ const getAllOrders = async (req, res, next) => {
 
     const orders = await Order.find(query)
       .populate('seller', 'name email username fullName')
+      .populate('items.product')
       .sort({ createdAt: -1 })
       .skip(startIndex)
       .limit(limit);
 
+    const transformedOrders = orders.map(transformOrder);
+
     res.status(200).json({
       success: true,
       data: {
+        total: total,
         totalData: total,
         totalPages: Math.ceil(total / limit),
         currentPage: page,
-        data: orders,
+        data: transformedOrders,
       },
     });
   } catch (error) {
@@ -46,15 +103,20 @@ const getAllOrders = async (req, res, next) => {
 const getOrderById = async (req, res, next) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate('seller', 'name email username fullName');
+      .populate('seller', 'name email username fullName')
+      .populate('items.product');
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    if (req.user.role !== 'admin' && order.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to view this order' });
+    }
+
     res.status(200).json({
       success: true,
-      data: order,
+      data: transformOrder(order),
     });
   } catch (error) {
     next(error);
@@ -72,19 +134,22 @@ const updateOrderStatus = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true, runValidators: true }
-    );
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    if (req.user.role !== 'admin' && order.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this order' });
+    }
+
+    order.status = status;
+    const updatedOrder = await order.save();
+
     res.status(200).json({
       success: true,
-      data: order,
+      data: updatedOrder,
       message: `Order status updated to ${status}`
     });
   } catch (error) {
@@ -101,6 +166,10 @@ const deleteOrder = async (req, res, next) => {
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (req.user.role !== 'admin' && order.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this order' });
     }
 
     await order.deleteOne();
@@ -131,17 +200,22 @@ const getOrderMetrics = async (req, res, next) => {
 
     const prevStartDate = new Date(startDate);
     prevStartDate.setDate(startDate.getDate() - days);
+    const filterQuery = {};
+    if (req.user.role !== 'admin') {
+      filterQuery.seller = req.user._id;
+    }
 
     // Get orders for current period
     const currentOrders = await Order.find({
+      ...filterQuery,
       createdAt: { $gte: startDate, $lte: today }
     });
 
     // Get orders for previous period
     const prevOrders = await Order.find({
+      ...filterQuery,
       createdAt: { $gte: prevStartDate, $lt: startDate }
     });
-
     // Helper to calculate trend
     const calcTrend = (curr, prev) => {
       if (prev === 0) return curr > 0 ? '+100%' : '0%';

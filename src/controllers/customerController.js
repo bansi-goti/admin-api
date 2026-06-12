@@ -11,6 +11,11 @@ const getAllCustomers = async (req, res, next) => {
     const search = req.query.search || '';
 
     const query = { role: 'user' };
+    if (req.user.role !== 'admin') {
+      const customerEmails = await Order.distinct('customer.email', { seller: req.user._id });
+      query.email = { $in: customerEmails };
+    }
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -27,15 +32,21 @@ const getAllCustomers = async (req, res, next) => {
       .limit(limit)
       .lean();
 
-    // Attach order counts and total spent to each customer
+    // Attach order counts, spent, averageOrderValue and lastOrderDate
     const customersWithStats = await Promise.all(
       customers.map(async (customer) => {
-        const customerOrders = await Order.find({ 'customer.email': customer.email });
+        const orderQuery = { 'customer.email': customer.email };
+        if (req.user.role !== 'admin') {
+          orderQuery.seller = req.user._id;
+        }
+        const customerOrders = await Order.find(orderQuery).sort({ createdAt: -1 });
         const spent = customerOrders.reduce((sum, order) => sum + order.totalAmount, 0);
         return {
           ...customer,
-          orders: customerOrders.length,
-          spent: spent,
+          totalOrders: customerOrders.length,
+          totalSpent: spent,
+          averageOrderValue: customerOrders.length > 0 ? Math.round(spent / customerOrders.length) : 0,
+          lastOrderDate: customerOrders.length > 0 ? customerOrders[0].createdAt : null,
         };
       })
     );
@@ -71,23 +82,35 @@ const getCustomerMetrics = async (req, res, next) => {
     const prevPeriodStart = new Date(currentPeriodStart);
     prevPeriodStart.setDate(currentPeriodStart.getDate() - days);
 
+    // Build seller filter
+    const orderQuery = {};
+    const userQuery = { role: 'user' };
+    
+    if (req.user.role !== 'admin') {
+      orderQuery.seller = req.user._id;
+      const customerEmails = await Order.distinct('customer.email', { seller: req.user._id });
+      userQuery.email = { $in: customerEmails };
+    }
+
     // Get current and previous period orders for value/orders metrics
     const currentOrders = await Order.find({
+      ...orderQuery,
       createdAt: { $gte: currentPeriodStart, $lte: today }
     });
 
     const prevOrders = await Order.find({
+      ...orderQuery,
       createdAt: { $gte: prevPeriodStart, $lt: currentPeriodStart }
     });
 
     // Get current and previous period users for new customers metric
     const currentUsers = await User.find({
-      role: 'user',
+      ...userQuery,
       createdAt: { $gte: currentPeriodStart, $lte: today }
     });
 
     const prevUsers = await User.find({
-      role: 'user',
+      ...userQuery,
       createdAt: { $gte: prevPeriodStart, $lt: currentPeriodStart }
     });
 
@@ -99,14 +122,22 @@ const getCustomerMetrics = async (req, res, next) => {
     };
 
     // Calculate specific stats
-    const totalCustomers = await User.countDocuments({ role: 'user' });
-    const prevTotalCustomers = await User.countDocuments({ role: 'user', createdAt: { $lt: currentPeriodStart } }); // Approximation for trend
+    const totalCustomers = await User.countDocuments(userQuery);
+    
+    let prevTotalCustomers;
+    if (req.user.role !== 'admin') {
+      const prevCustomerEmails = await Order.distinct('customer.email', { 
+        seller: req.user._id, 
+        createdAt: { $lt: currentPeriodStart } 
+      });
+      prevTotalCustomers = prevCustomerEmails.length;
+    } else {
+      prevTotalCustomers = await User.countDocuments({ role: 'user', createdAt: { $lt: currentPeriodStart } });
+    }
 
-    const currOrdersCount = await Order.countDocuments(); // Lifetime orders
-    const prevOrdersCount = await Order.countDocuments({ createdAt: { $lt: currentPeriodStart } }); 
+    const currOrdersCount = await Order.countDocuments(orderQuery);
+    const prevOrdersCount = await Order.countDocuments({ ...orderQuery, createdAt: { $lt: currentPeriodStart } }); 
 
-    // Because lifetime orders/revenue never goes down, comparing lifetime totals is not a standard trend metric.
-    // Instead we compare current period vs previous period for trends.
     const currTotalValue = currentOrders.reduce((sum, o) => sum + o.totalAmount, 0);
     const prevTotalValue = prevOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
@@ -114,7 +145,7 @@ const getCustomerMetrics = async (req, res, next) => {
     const prevNewThisMonth = prevUsers.length;
 
     // For Lifetime Orders & Value
-    const allOrders = await Order.find();
+    const allOrders = await Order.find(orderQuery);
     const lifetimeValue = allOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
     res.status(200).json({
@@ -122,11 +153,11 @@ const getCustomerMetrics = async (req, res, next) => {
       data: {
         totalOrders: {
           value: allOrders.length,
-          trend: calcTrend(currentOrders.length, prevOrders.length) // Trend is order volume comparison
+          trend: calcTrend(currentOrders.length, prevOrders.length)
         },
         totalValue: {
           value: lifetimeValue,
-          trend: calcTrend(currTotalValue, prevTotalValue) // Trend is revenue comparison
+          trend: calcTrend(currTotalValue, prevTotalValue)
         },
         totalCustomers: {
           value: totalCustomers,
@@ -154,9 +185,53 @@ const getCustomerById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Customer not found' });
     }
 
-    const customerOrders = await Order.find({ 'customer.email': customer.email });
-    customer.orders = customerOrders.length;
-    customer.spent = customerOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    const orderQuery = { 'customer.email': customer.email };
+    if (req.user.role !== 'admin') {
+      orderQuery.seller = req.user._id;
+
+      // Check authorization
+      const hasOrder = await Order.findOne(orderQuery);
+      if (!hasOrder) {
+        return res.status(403).json({ success: false, message: 'Not authorized to view this customer' });
+      }
+    }
+
+    const customerOrders = await Order.find(orderQuery).populate('items.product').sort({ createdAt: -1 });
+    customer.totalOrders = customerOrders.length;
+    customer.totalSpent = customerOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    customer.averageOrderValue = customer.totalOrders > 0 ? Math.round(customer.totalSpent / customer.totalOrders) : 0;
+    customer.lastOrderDate = customerOrders.length > 0 ? customerOrders[0].createdAt : null;
+
+    // Calculate customer insights dynamically
+    // shippingAddress: get from the last order's shipping address or default (if there's a shippingAddress logic later)
+    // favoriteCategory: find the category with the most purchases
+    const categoryCounts = {};
+    for (const order of customerOrders) {
+      for (const item of order.items) {
+        if (item.product && item.product.category) {
+          const catName = item.product.category.toString(); // or populating category name
+          categoryCounts[catName] = (categoryCounts[catName] || 0) + item.quantity;
+        }
+      }
+    }
+    
+    let favoriteCategory = 'None';
+    let maxCount = 0;
+    for (const cat in categoryCounts) {
+      if (categoryCounts[cat] > maxCount) {
+        maxCount = categoryCounts[cat];
+        favoriteCategory = cat;
+      }
+    }
+    
+    // Resolve category name if it's an ObjectId by looking it up, or fallback
+    if (favoriteCategory !== 'None') {
+      const Category = require('../models/Category');
+      const catObj = await Category.findById(favoriteCategory);
+      if (catObj) favoriteCategory = catObj.name;
+    }
+
+    customer.favoriteCategory = favoriteCategory;
 
     res.status(200).json({
       success: true,
