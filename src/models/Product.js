@@ -104,6 +104,15 @@ const productSchema = mongoose.Schema(
       type: String,
       default: 'free',
     },
+    indiaShippingIncluded: {
+      type: Boolean,
+      default: true,
+    },
+    intlShippingType: {
+      type: String,
+      enum: ['dynamic', 'flat', 'free'],
+      default: 'dynamic',
+    },
     variants: {
       type: Array,
       default: [],

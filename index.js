@@ -18,6 +18,9 @@ const paymentRoutes = require('./src/routes/paymentRoutes');
 const analyticsRoutes = require('./src/routes/analyticsRoutes');
 const advertisementRoutes = require('./src/routes/advertisementRoutes');
 const websiteSettingRoutes = require('./src/routes/websiteSettingRoutes');
+const reviewRoutes = require('./src/routes/reviewRoutes');
+const inventoryRoutes = require('./src/routes/inventoryRoutes');
+const shippingRoutes = require('./src/routes/shippingRoutes');
 const path = require('path');
 
 // Load env vars
@@ -47,6 +50,9 @@ app.use('/api/settings/payments', paymentRoutes);
 app.use('/api/settings/website', websiteSettingRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/advertisements', advertisementRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/shipping', shippingRoutes);
 
 // Static file serving for uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
