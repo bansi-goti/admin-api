@@ -3,195 +3,204 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const User = require('../models/User');
 
-// Helper to calculate percentage change
 const calculateTrend = (current, previous) => {
-  if (previous === 0) return current > 0 ? '+100.0%' : '0.0%';
+  if (previous === 0) return current > 0 ? '+100%' : '0%';
   const diff = ((current - previous) / previous) * 100;
-  return diff > 0 ? `+${diff.toFixed(1)}%` : `${diff.toFixed(1)}%`;
+  return diff >= 0 ? `+${diff.toFixed(1)}%` : `${diff.toFixed(1)}%`;
 };
 
-// Helper to get start and end dates
-const getTimeWindow = (rangeStr, isPrevious = false) => {
-  const now = new Date();
-  let start, end;
-  
-  if (rangeStr === 'Today' || rangeStr === 'Daily') {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (isPrevious ? 1 : 0));
-    end = isPrevious ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999) : now;
-  } else if (rangeStr === 'Yearly') {
-    start = new Date(now.getFullYear() - (isPrevious ? 1 : 0), 0, 1);
-    end = isPrevious ? new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999) : now;
-  } else if (rangeStr === 'Weekly') {
-    const day = now.getDay() || 7;
-    const offset = isPrevious ? 7 : 0;
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1 - offset);
-    end = isPrevious ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999) : now;
-  } else {
-    // This Month / Monthly
-    start = new Date(now.getFullYear(), now.getMonth() - (isPrevious ? 1 : 0), 1);
-    end = isPrevious ? new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999) : now;
-  }
-  return { start, end };
-};
-
-// Helper to generate time series data for charts
-const generateTimeSeries = (orders, rangeStr, metricType) => {
-  const now = new Date();
-  const map = {};
-  
-  if (rangeStr === 'Today' || rangeStr === 'Daily') {
-    for (let i = 0; i <= now.getHours(); i++) {
-      const key = i < 10 ? `0${i}:00` : `${i}:00`;
-      map[key] = { count: 0, rev: 0 };
-    }
-    orders.forEach(o => {
-      const h = new Date(o.createdAt).getHours();
-      const key = h < 10 ? `0${h}:00` : `${h}:00`;
-      if (map[key]) { map[key].count++; map[key].rev += o.totalAmount; }
-    });
-  } else if (rangeStr === 'Yearly') {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    for (let i = 0; i <= now.getMonth(); i++) map[months[i]] = { count: 0, rev: 0 };
-    orders.forEach(o => {
-      const m = new Date(o.createdAt).getMonth();
-      const key = months[m];
-      if (map[key]) { map[key].count++; map[key].rev += o.totalAmount; }
-    });
-  } else if (rangeStr === 'Weekly') {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    for (let i=0; i<7; i++) map[days[i]] = { count:0, rev:0 };
-    orders.forEach(o => {
-      let d = new Date(o.createdAt).getDay() - 1;
-      if (d === -1) d = 6; // Sunday
-      const key = days[d];
-      if (map[key]) { map[key].count++; map[key].rev += o.totalAmount; }
-    });
-  } else { // This Month / Monthly
-    for (let i = 1; i <= now.getDate(); i++) {
-      const d = new Date(now.getFullYear(), now.getMonth(), i);
-      const key = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-      map[key] = { count: 0, rev: 0 };
-    }
-    orders.forEach(o => {
-      const key = new Date(o.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-      if (map[key]) { map[key].count++; map[key].rev += o.totalAmount; }
-    });
-  }
-
-  return Object.keys(map).map(k => {
-    const c = map[k];
-    const simulatedTraffic = c.count * 40 || Math.floor(Math.random() * 50) + 10;
-    let val = 0;
-    if (metricType === 'conversion') val = c.count > 0 ? Number(((c.count / simulatedTraffic) * 100).toFixed(1)) : 0;
-    else if (metricType === 'traffic') val = simulatedTraffic;
-    else if (metricType === 'orders') val = c.count;
-    else if (metricType === 'aov') val = c.count > 0 ? Math.round(c.rev / c.count) : 0;
-    else if (metricType === 'customers') val = c.count;
-    return { name: k, value: val };
-  });
-};
-
-// @desc    Get detailed business analytics
-// @route   GET /api/analytics/detailed
-// @access  Private
 const getDetailedAnalytics = async (req, res, next) => {
   try {
-    const { range, conversionRange, marketRange, trafficRange } = req.query;
-
-    // Fetch orders for Global Metrics
-    const { start: currStart, end: currEnd } = getTimeWindow(range || 'This Month');
-    const { start: prevStart, end: prevEnd } = getTimeWindow(range || 'This Month', true);
-    const currentOrders = await Order.find({ createdAt: { $gte: currStart, $lte: currEnd } });
-    const prevOrders = await Order.find({ createdAt: { $gte: prevStart, $lte: prevEnd } });
-
-    // Fetch orders for Chart Specific Timeframes
-    const { start: convStart } = getTimeWindow(conversionRange || 'Daily');
-    const conversionOrders = await Order.find({ createdAt: { $gte: convStart } });
+    const { startDate, endDate } = req.query;
     
-    const { start: trafStart } = getTimeWindow(trafficRange || 'This Month');
-    const trafficOrders = await Order.find({ createdAt: { $gte: trafStart } });
+    // Parse dates or default to 'This Month'
+    const currEnd = endDate ? new Date(endDate) : new Date();
+    const currStart = startDate ? new Date(startDate) : new Date(currEnd.getFullYear(), currEnd.getMonth(), 1);
+    
+    // Set End to 23:59:59
+    currEnd.setHours(23, 59, 59, 999);
+    currStart.setHours(0, 0, 0, 0);
 
-    // --- Core Metrics (Based on Global Range) ---
-    const totalOrdersCurr = currentOrders.length;
-    const totalOrdersPrev = prevOrders.length;
+    // Calculate previous period for trends (same duration)
+    const duration = currEnd.getTime() - currStart.getTime();
+    const prevEnd = new Date(currStart.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - duration);
 
-    const customersCurr = await User.countDocuments({ role: 'user', status: 'Active' });
-    const customersPrev = await User.countDocuments({ role: 'user', status: 'Active', createdAt: { $lte: prevEnd } });
+    const isAdmin = req.user.role === 'admin';
+    const orderQuery = isAdmin ? {} : { seller: req.user._id };
 
-    const revenueCurr = currentOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-    const revenuePrev = prevOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-    const aovCurr = totalOrdersCurr > 0 ? revenueCurr / totalOrdersCurr : 0;
-    const aovPrev = totalOrdersPrev > 0 ? revenuePrev / totalOrdersPrev : 0;
+    // Fetch Orders for Current and Previous Period
+    const currentOrders = await Order.find({ 
+        ...orderQuery, 
+        createdAt: { $gte: currStart, $lte: currEnd } 
+    }).populate({ path: 'items.product', populate: { path: 'category' }});
+    
+    const prevOrders = await Order.find({ 
+        ...orderQuery, 
+        createdAt: { $gte: prevStart, $lte: prevEnd } 
+    });
 
-    const simulatedTrafficCurr = totalOrdersCurr * 40 || Math.floor(Math.random() * 500) + 100;
-    const simulatedTrafficPrev = totalOrdersPrev * 40 || Math.floor(Math.random() * 500) + 100;
-    const conversionCurr = totalOrdersCurr > 0 ? (totalOrdersCurr / simulatedTrafficCurr) * 100 : 0;
-    const conversionPrev = totalOrdersPrev > 0 ? (totalOrdersPrev / simulatedTrafficPrev) * 100 : 0;
+    // 1. SUMMARY STATS
+    const currRevenue = currentOrders.reduce((acc, o) => acc + (isAdmin ? o.totalAmount : (o.sellerEarning || (o.totalAmount * 0.85))), 0);
+    const prevRevenue = prevOrders.reduce((acc, o) => acc + (isAdmin ? o.totalAmount : (o.sellerEarning || (o.totalAmount * 0.85))), 0);
 
-    // Base metric array
-    const metricsRaw = [
-      { id: 'conversion', title: 'Conversion Rate', value: `${conversionCurr.toFixed(2)}%`, trend: calculateTrend(conversionCurr, conversionPrev), positive: conversionCurr >= conversionPrev },
-      { id: 'aov', title: 'Avg. Order Value', value: `₹${aovCurr.toFixed(0)}`, trend: calculateTrend(aovCurr, aovPrev), positive: aovCurr >= aovPrev },
-      { id: 'customers', title: 'Active Customers', value: `${customersCurr}`, trend: calculateTrend(customersCurr, customersPrev), positive: customersCurr >= customersPrev },
-      { id: 'orders', title: 'Total Orders', value: `${totalOrdersCurr}`, trend: calculateTrend(totalOrdersCurr, totalOrdersPrev), positive: totalOrdersCurr >= totalOrdersPrev }
+    const currProfit = currentOrders.reduce((acc, o) => acc + (isAdmin ? (o.profit || 0) : (o.sellerEarning || (o.totalAmount * 0.85))), 0);
+    const prevProfit = prevOrders.reduce((acc, o) => acc + (isAdmin ? (o.profit || 0) : (o.sellerEarning || (o.totalAmount * 0.85))), 0);
+
+    const currItemsSold = currentOrders.reduce((acc, o) => acc + o.items.reduce((sum, item) => sum + item.quantity, 0), 0);
+    const prevItemsSold = prevOrders.reduce((acc, o) => acc + o.items.reduce((sum, item) => sum + item.quantity, 0), 0);
+
+    const currAOV = currentOrders.length > 0 ? currRevenue / currentOrders.length : 0;
+    const prevAOV = prevOrders.length > 0 ? prevRevenue / prevOrders.length : 0;
+
+    // Repeat Customers Logic
+    const currCustomers = {};
+    currentOrders.forEach(o => {
+        const email = o.customer?.email;
+        if (email) {
+            currCustomers[email] = (currCustomers[email] || 0) + 1;
+        }
+    });
+    const currRepeatCustomers = Object.values(currCustomers).filter(count => count > 1).length;
+
+    const prevCustomers = {};
+    prevOrders.forEach(o => {
+        const email = o.customer?.email;
+        if (email) {
+            prevCustomers[email] = (prevCustomers[email] || 0) + 1;
+        }
+    });
+    const prevRepeatCustomers = Object.values(prevCustomers).filter(count => count > 1).length;
+
+    const summaryStats = {
+        totalRevenue: { value: currRevenue, trend: calculateTrend(currRevenue, prevRevenue) },
+        totalProfit: { value: currProfit, trend: calculateTrend(currProfit, prevProfit) },
+        totalOrders: { value: currentOrders.length, trend: calculateTrend(currentOrders.length, prevOrders.length) },
+        avgOrderValue: { value: currAOV, trend: calculateTrend(currAOV, prevAOV) },
+        itemsSold: { value: currItemsSold, trend: calculateTrend(currItemsSold, prevItemsSold) },
+        repeatCustomers: { value: currRepeatCustomers, trend: calculateTrend(currRepeatCustomers, prevRepeatCustomers) }
+    };
+
+    // 2. TIME SERIES DATA (Revenue Overview & Sales Trend)
+    const timeMap = {};
+    const growthMap = {};
+    
+    // Group by Date for 'This Month' or similar ranges
+    currentOrders.forEach(o => {
+        const d = new Date(o.createdAt);
+        const key = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        
+        if (!timeMap[key]) timeMap[key] = { date: key, revenue: 0, profit: 0, orders: 0 };
+        if (!growthMap[key]) growthMap[key] = new Set();
+        
+        timeMap[key].revenue += (isAdmin ? o.totalAmount : (o.sellerEarning || (o.totalAmount * 0.85)));
+        timeMap[key].profit += (isAdmin ? (o.profit || 0) : (o.sellerEarning || (o.totalAmount * 0.85)));
+        timeMap[key].orders += 1;
+        
+        if (o.customer?.email) growthMap[key].add(o.customer.email);
+    });
+
+    const timeSeriesData = Object.values(timeMap).sort((a,b) => new Date(a.date) - new Date(b.date));
+    
+    let cumulativeCustomers = 0;
+    const customerGrowthData = Object.keys(growthMap).sort((a,b) => new Date(a) - new Date(b)).map(key => {
+        cumulativeCustomers += growthMap[key].size;
+        return { date: key, count: cumulativeCustomers };
+    });
+
+    // 3. PIE CHARTS (Category & Payment Method)
+    const categorySales = {};
+    const paymentMethods = {};
+    const productSales = {};
+
+    currentOrders.forEach(o => {
+        // Payment Methods
+        const pMethod = o.paymentStatus === 'Paid' ? 'Online Payment' : (o.paymentMethod || 'Unknown');
+        if (!paymentMethods[pMethod]) paymentMethods[pMethod] = 0;
+        paymentMethods[pMethod] += o.totalAmount;
+
+        // Categories & Products
+        o.items.forEach(item => {
+            if (item.product) {
+                // Category
+                const catName = item.product.category?.name || 'Uncategorized';
+                if (!categorySales[catName]) categorySales[catName] = 0;
+                categorySales[catName] += (item.quantity * item.price);
+
+                // Top Products
+                const pid = item.product._id.toString();
+                if (!productSales[pid]) {
+                    productSales[pid] = {
+                        id: pid,
+                        name: item.product.name,
+                        subtitle: catName,
+                        image: item.product.images?.[0] || 'https://via.placeholder.com/40',
+                        orders: 0,
+                        sold: 0,
+                        revenue: 0,
+                        profit: 0
+                    };
+                }
+                productSales[pid].orders += 1;
+                productSales[pid].sold += item.quantity;
+                productSales[pid].revenue += (item.quantity * item.price);
+                productSales[pid].profit += (item.quantity * item.price * 0.3); // Rough estimate if not stored
+            }
+        });
+    });
+
+    const colors = ["#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#3b82f6", "#14b8a6", "#f43f5e"];
+    
+    const categoryData = Object.keys(categorySales).map((k, i) => ({
+        name: k, value: categorySales[k], color: colors[i % colors.length]
+    })).sort((a,b) => b.value - a.value);
+
+    const paymentMethodData = Object.keys(paymentMethods).map((k, i) => ({
+        name: k, value: paymentMethods[k], color: colors[i % colors.length]
+    })).sort((a,b) => b.value - a.value);
+
+    const topProducts = Object.values(productSales)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 20);
+
+    // Quick Insights
+    const revenueUp = currRevenue >= prevRevenue;
+    const topCat = categoryData.length > 0 ? categoryData[0] : null;
+    const topCatPercent = topCat && currRevenue > 0 ? ((topCat.value / currRevenue) * 100).toFixed(1) : 0;
+    const topPay = paymentMethodData.length > 0 ? paymentMethodData[0] : null;
+    const topPayPercent = topPay && currRevenue > 0 ? ((topPay.value / currRevenue) * 100).toFixed(1) : 0;
+
+    const insights = [
+        {
+            type: revenueUp ? 'success' : 'danger',
+            icon: revenueUp ? 'TrendingUp' : 'TrendingDown',
+            title: `Revenue is ${revenueUp ? 'up' : 'down'} by ${summaryStats.totalRevenue.trend.replace('+','')} this period`,
+            desc: `Your store is performing ${revenueUp ? 'better' : 'worse'} than the previous period.`
+        },
+        ...(topCat ? [{
+            type: 'warning',
+            icon: 'Package',
+            title: `${topCat.name} is your top selling category`,
+            desc: `You made ${topCatPercent}% of total revenue from ${topCat.name}.`
+        }] : []),
+        ...(topPay ? [{
+            type: 'info',
+            icon: 'DollarSign',
+            title: `${topPay.name} is the most used payment method`,
+            desc: `${topPayPercent}% of revenue came via ${topPay.name}.`
+        }] : [])
     ];
 
-    // Sparklines for top metrics use Global Range
-    const metricsWithChartData = metricsRaw.map(m => ({
-      ...m,
-      chartData: generateTimeSeries(currentOrders, range || 'This Month', m.id).map(d => ({ value: d.value }))
-    }));
-
-    // Area Chart for Conversion uses ConversionRange
-    const conversionFullChart = generateTimeSeries(conversionOrders, conversionRange || 'Daily', 'conversion');
-    metricsWithChartData.find(m => m.id === 'conversion').data = conversionFullChart;
-
-
-    // --- Traffic Chart (Based on TrafficRange) ---
-    const trafficData = generateTimeSeries(trafficOrders, trafficRange || 'This Month', 'traffic');
-
-
-    // --- Market Share (Based on MarketRange) ---
-    const categories = await Category.find();
-    const colors = ["#6366f1", "#10b981", "#f59e0b", "#3b82f6", "#ec4899", "#8b5cf6", "#14b8a6", "#f43f5e"];
-    const products = await Product.find().populate('category');
-    
-    // To make market share dynamic across timeframes without Order.items, we apply a random modifier 
-    // seeded by the marketRange string length to simulate real market shifts
-    const shiftMultiplier = marketRange === 'Yearly' ? 1.5 : (marketRange === 'Today' ? 0.5 : 1);
-    
-    const categorySales = {};
-    for (const prod of products) {
-      let weight = (prod.sales && prod.sales > 0) ? prod.sales * prod.price : (prod.stock > 0 ? prod.stock : 1);
-      weight = weight * shiftMultiplier * (Math.random() * 0.5 + 0.75); // +/- 25% variation for realism across timeframes
-      
-      const catName = prod.category?.name || 'Uncategorized';
-      categorySales[catName] = (categorySales[catName] || 0) + weight;
-    }
-
-    let totalSalesVal = Object.values(categorySales).reduce((a,b)=>a+b, 0) || 1;
-
-    const marketShareRaw = Object.keys(categorySales).map((cat, idx) => ({
-      name: cat,
-      value: Math.round((categorySales[cat] / totalSalesVal) * 100),
-      color: colors[idx % colors.length]
-    })).sort((a,b) => b.value - a.value).slice(0, 5);
-
-    const marketShare = marketShareRaw.length > 0 ? marketShareRaw : categories.slice(0,5).map((c, i) => ({
-      name: c.name, value: Math.round(100 / Math.min(categories.length, 5)), color: colors[i]
-    }));
-
-    const simulatedBounceRate = trafficData.length 
-      ? (Math.random() * 15 + 25).toFixed(2) // 25% to 40%
-      : '32.45';
-
     res.status(200).json({
-      status: true,
+      success: true,
       data: {
-        metrics: metricsWithChartData,
-        marketShare,
-        traffic: trafficData,
-        bounceRate: `${simulatedBounceRate}%`
+        summaryStats,
+        timeSeriesData,
+        customerGrowthData,
+        categoryData,
+        paymentMethodData,
+        topProducts,
+        insights
       }
     });
 

@@ -60,6 +60,45 @@ const seedOrders = async () => {
     let allOrders = [];
 
     sellers.forEach((seller, idx) => {
+      // Find products that belong to this seller
+      const sellerProducts = products.filter(p => p.seller && p.seller.toString() === seller._id.toString());
+      
+      // If seller has no products, don't generate dummy orders for them
+      if (sellerProducts.length === 0) {
+        return;
+      }
+
+      const getRandomSellerProduct = () => sellerProducts[Math.floor(Math.random() * sellerProducts.length)];
+
+      const generateOrder = (sellerId, daysAgo, orderId, name, email, status) => {
+        const p1 = getRandomSellerProduct();
+        const items = [
+          { product: p1._id, quantity: 1, price: p1.price || 1000 },
+        ];
+        if (Math.random() > 0.5 && sellerProducts.length > 1) {
+          const p2 = getRandomSellerProduct();
+          // Avoid duplicate product in same order if possible, though random
+          if (p2._id.toString() !== p1._id.toString()) {
+            items.push({ product: p2._id, quantity: 2, price: p2.price || 500 });
+          }
+        }
+        
+        const totalAmount = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
+
+        return {
+          seller: sellerId,
+          orderId,
+          customer: { name, email },
+          items,
+          totalAmount,
+          sellerEarning: totalAmount * 0.8,
+          profit: totalAmount * 0.2,
+          paymentMethod: 'Stripe',
+          status,
+          createdAt: new Date(today.getTime() - daysAgo * 24 * 60 * 60 * 1000)
+        };
+      };
+
       const prefix = `ORD-${8900 + idx * 100}`;
       const orders = [
         generateOrder(seller._id, 6, `${prefix}-1`, 'John Doe', 'john@example.com', 'Delivered'),

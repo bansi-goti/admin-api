@@ -21,6 +21,11 @@ const websiteSettingRoutes = require('./src/routes/websiteSettingRoutes');
 const reviewRoutes = require('./src/routes/reviewRoutes');
 const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const shippingRoutes = require('./src/routes/shippingRoutes');
+const earningsRoutes = require('./src/routes/earningsRoutes');
+const withdrawalRoutes = require('./src/routes/withdrawalRoutes');
+const couponRoutes = require('./src/routes/couponRoutes');
+const notificationRoutes = require('./src/routes/notificationRoutes');
+const userRoutes = require('./src/routes/userRoutes');
 const path = require('path');
 
 // Load env vars
@@ -46,6 +51,9 @@ app.use('/api/countries', countryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/settings/payments', paymentRoutes);
 app.use('/api/settings/website', websiteSettingRoutes);
 app.use('/api/analytics', analyticsRoutes);
@@ -53,6 +61,51 @@ app.use('/api/advertisements', advertisementRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/shipping', shippingRoutes);
+app.use('/api/earnings', earningsRoutes);
+app.use('/api/withdrawals', withdrawalRoutes);
+
+app.get('/api/debug-customers', async (req, res) => {
+  try {
+    const User = require('./src/models/User');
+    const Order = require('./src/models/Order');
+    const limit = 10;
+    const page = 1;
+    const query = { role: 'user' };
+    const startIndex = (page - 1) * limit;
+    const total = await User.countDocuments(query);
+
+    const customers = await User.find(query)
+      .sort({ createdAt: -1 })
+      .skip(startIndex)
+      .limit(limit)
+      .lean();
+
+    const customersWithStats = await Promise.all(
+      customers.map(async (customer) => {
+        const orderQuery = { 'customer.email': customer.email };
+        const customerOrders = await Order.find(orderQuery).sort({ createdAt: -1 });
+        const spent = customerOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+        return {
+          ...customer,
+          totalOrders: customerOrders.length,
+          totalSpent: spent,
+          averageOrderValue: customerOrders.length > 0 ? Math.round(spent / customerOrders.length) : 0,
+          lastOrderDate: customerOrders.length > 0 ? customerOrders[0].createdAt : null,
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalData: total,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+        data: customersWithStats,
+      },
+    });
+  } catch(e) { res.status(500).json({e: e.message}) }
+});
 
 // Static file serving for uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

@@ -34,6 +34,13 @@ const userSchema = mongoose.Schema(
     profileImage: {
       type: String,
     },
+    phone: {
+      type: String,
+    },
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ['Active', 'Inactive'],

@@ -6,6 +6,10 @@ exports.getInventoryOverview = async (req, res) => {
     
     // Base filter
     const query = {};
+    if (req.user && req.user.role !== 'admin') {
+      query.seller = req.user._id;
+    }
+    
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -27,7 +31,11 @@ exports.getInventoryOverview = async (req, res) => {
     const totalItems = await Product.countDocuments(query);
 
     // Calculate Stats across ALL products (ignoring search filter for global stats)
-    const allProducts = await Product.find().populate('category', 'name');
+    const baseQuery = {};
+    if (req.user && req.user.role !== 'admin') {
+      baseQuery.seller = req.user._id;
+    }
+    const allProducts = await Product.find(baseQuery).populate('category', 'name');
     
     let inStockCount = 0;
     let lowStockCount = 0;

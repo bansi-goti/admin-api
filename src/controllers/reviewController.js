@@ -19,6 +19,13 @@ exports.getAllReviews = async (req, res) => {
       }
     }
     
+    // RBAC: If user is not admin, they only see reviews for their own products
+    if (req.user && req.user.role !== 'admin') {
+      const sellerProducts = await Product.find({ seller: req.user._id }).select('_id');
+      const sellerProductIds = sellerProducts.map(p => p._id);
+      filter.productId = { $in: sellerProductIds };
+    }
+    
     // For search, we might need to populate first or do a simple text search if applicable.
     // For simplicity, we skip full-text search here or filter by Product/User names after population
     // if needed. Real implementations would use text indexes or lookup aggregates.
@@ -116,8 +123,18 @@ exports.updateReviewStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
-    const review = await Review.findByIdAndUpdate(id, { status }, { new: true });
+    let review = await Review.findById(id);
     if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+
+    // RBAC: Verify ownership if not admin
+    if (req.user && req.user.role !== 'admin') {
+      const product = await Product.findById(review.productId);
+      if (!product || product.seller.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: 'Not authorized to update this review' });
+      }
+    }
+
+    review = await Review.findByIdAndUpdate(id, { status }, { new: true });
 
     res.status(200).json({ success: true, data: review });
   } catch (error) {
@@ -128,8 +145,18 @@ exports.updateReviewStatus = async (req, res) => {
 exports.deleteReview = async (req, res) => {
   try {
     const { id } = req.params;
-    const review = await Review.findByIdAndDelete(id);
+    let review = await Review.findById(id);
     if (!review) return res.status(404).json({ success: false, message: 'Review not found' });
+
+    // RBAC: Verify ownership if not admin
+    if (req.user && req.user.role !== 'admin') {
+      const product = await Product.findById(review.productId);
+      if (!product || product.seller.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: 'Not authorized to delete this review' });
+      }
+    }
+
+    await review.deleteOne();
 
     res.status(200).json({ success: true, message: 'Review deleted successfully' });
   } catch (error) {

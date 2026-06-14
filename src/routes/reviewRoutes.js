@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const reviewController = require('../controllers/reviewController');
+const { protect } = require('../middlewares/authMiddleware');
+
+// Use protect middleware for all review routes
+router.use(protect);
 
 // GET all reviews (with filters, pagination, stats)
 router.get('/all', reviewController.getAllReviews);

@@ -17,6 +17,11 @@ const getAllProducts = async (req, res, next) => {
       ];
     }
 
+    // RBAC: If user is not admin, they only see their own products
+    if (req.user && req.user.role !== 'admin') {
+      query.seller = req.user._id;
+    }
+
     const startIndex = (page - 1) * limit;
     const total = await Product.countDocuments(query);
 
@@ -57,6 +62,11 @@ const getProductById = async (req, res, next) => {
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // RBAC: Verify ownership if not admin
+    if (req.user && req.user.role !== 'admin' && product.seller._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to access this product' });
     }
 
     res.status(200).json({
@@ -224,15 +234,22 @@ const updateProductStatus = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true, runValidators: true }
-    );
+    let product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
+
+    // RBAC: Verify ownership if not admin
+    if (req.user && req.user.role !== 'admin' && product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this product' });
+    }
+
+    product = await Product.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true, runValidators: true }
+    );
 
     res.status(200).json({
       success: true,
@@ -253,6 +270,11 @@ const deleteProduct = async (req, res, next) => {
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // RBAC: Verify ownership if not admin
+    if (req.user && req.user.role !== 'admin' && product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this product' });
     }
 
     await product.deleteOne();
@@ -313,6 +335,11 @@ const updateProduct = async (req, res, next) => {
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // RBAC: Verify ownership if not admin
+    if (req.user && req.user.role !== 'admin' && product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this product' });
     }
 
     // Update fields
