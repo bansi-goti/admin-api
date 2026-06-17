@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Product = require('../models/Product');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
@@ -29,14 +30,26 @@ const getAllSubAdmins = async (req, res, next) => {
 
     const subAdmins = await User.find(query)
       .select('-password')
+      .lean()
       .skip((page - 1) * limit)
       .limit(Number(limit));
 
     const total = await User.countDocuments(query);
 
+    // Fetch dynamic product count for each sub admin
+    const subAdminsWithProductCounts = await Promise.all(
+      subAdmins.map(async (admin) => {
+        const productsCount = await Product.countDocuments({ seller: admin._id });
+        return {
+          ...admin,
+          productsCount
+        };
+      })
+    );
+
     res.json({
       code: 200,
-      data: subAdmins,
+      data: subAdminsWithProductCounts,
       total,
       totalPages: Math.ceil(total / limit),
       page: Number(page)

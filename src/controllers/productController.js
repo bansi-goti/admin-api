@@ -116,7 +116,8 @@ const createProduct = async (req, res, next) => {
       enable360,
       showOnHomepage,
       isFeatured,
-      isTrending
+      isTrending,
+      videoUrl
     } = req.body;
 
     const actualPrice = price || basePrice;

@@ -23,6 +23,7 @@ const inventoryRoutes = require('./src/routes/inventoryRoutes');
 const shippingRoutes = require('./src/routes/shippingRoutes');
 const earningsRoutes = require('./src/routes/earningsRoutes');
 const withdrawalRoutes = require('./src/routes/withdrawalRoutes');
+const uploadRoutes = require('./src/routes/uploadRoutes');
 const couponRoutes = require('./src/routes/couponRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
 const userRoutes = require('./src/routes/userRoutes');
@@ -63,6 +64,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/earnings', earningsRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
+app.use('/api/upload', uploadRoutes);
 
 app.get('/api/debug-customers', async (req, res) => {
   try {

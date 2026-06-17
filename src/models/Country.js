@@ -13,6 +13,11 @@ const countrySchema = mongoose.Schema(
       enum: ['Active', 'Inactive'],
       default: 'Active',
     },
+    currency: {
+      code: { type: String, default: '' },
+      name: { type: String, default: '' },
+      symbol: { type: String, default: '' },
+    },
     seller: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,

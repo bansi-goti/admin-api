@@ -1,6 +1,16 @@
 const Category = require('../models/Category');
 const Product = require('../models/Product'); // To calculate productsCount dynamically if virtual doesn't work
+const fs = require('fs');
+const path = require('path');
 
+// Helper to remove uploaded file in case of error or update
+const removeFile = (filePath) => {
+  if (!filePath) return;
+  const fullPath = path.join(__dirname, '../..', filePath);
+  if (fs.existsSync(fullPath)) {
+    fs.unlinkSync(fullPath);
+  }
+};
 // @desc    Get all categories with pagination & search
 // @route   GET /api/categories
 // @access  Private
@@ -25,11 +35,10 @@ const getAllCategories = async (req, res) => {
 
     // Attach productsCount dynamically (assuming Product schema doesn't have category field yet, returning 0 for now or calculate if it does)
     const enhancedCategories = await Promise.all(categories.map(async (cat) => {
-      // If products actually have a category reference, we could count them here:
-      // const count = await Product.countDocuments({ category: cat._id });
+      const count = await Product.countDocuments({ category: cat._id });
       return {
         ...cat,
-        productsCount: 0 // Mocked for now. Can be updated later when Product schema gets category field.
+        productsCount: count
       };
     }));
 
@@ -70,11 +79,6 @@ const getCategoryById = async (req, res) => {
 const createCategory = async (req, res) => {
   try {
     const { name, description, status } = req.body;
-    let image = '';
-
-    if (req.file) {
-      image = `/uploads/${req.file.filename}`;
-    }
 
     // Check if category name already exists for this seller
     const exists = await Category.findOne({ name, seller: req.user._id });
@@ -85,7 +89,7 @@ const createCategory = async (req, res) => {
     const category = await Category.create({
       name,
       description,
-      image,
+      image: req.body.image || '',
       status: status || 'Active',
       seller: req.user._id
     });
@@ -112,8 +116,10 @@ const updateCategory = async (req, res) => {
     if (description !== undefined) category.description = description;
     if (status) category.status = status;
     
-    if (req.file) {
-      category.image = `/uploads/${req.file.filename}`;
+    if (req.body.image && req.body.image !== category.image) {
+      // Remove old image
+      removeFile(category.image);
+      category.image = req.body.image;
     }
 
     await category.save();

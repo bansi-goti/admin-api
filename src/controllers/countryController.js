@@ -1,4 +1,24 @@
 const Country = require('../models/Country');
+const axios = require('axios');
+
+// Helper: fetch currency info for a country name via restcountries API
+const fetchCurrencyForCountry = async (countryName) => {
+  try {
+    const url = `https://restcountries.com/v3.1/name/${encodeURIComponent(countryName)}?fullText=true&fields=currencies`;
+    const resp = await axios.get(url, { timeout: 8000 });
+    const data = Array.isArray(resp.data) ? resp.data[0] : null;
+    if (!data?.currencies) return null;
+    const firstKey = Object.keys(data.currencies)[0];
+    if (!firstKey) return null;
+    return {
+      code: firstKey,
+      name: data.currencies[firstKey]?.name || '',
+      symbol: data.currencies[firstKey]?.symbol || '',
+    };
+  } catch {
+    return null;
+  }
+};
 
 // @desc    Get all countries (with pagination & search)
 // @route   GET /api/countries
@@ -26,7 +46,7 @@ const getAllCountries = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: {
-        totalData: total,
+        total,
         totalPages: Math.ceil(total / limit),
         currentPage: page,
         data: countries,
@@ -69,9 +89,13 @@ const createCountry = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Country already exists' });
     }
 
+    // Auto-fetch currency info
+    const currency = await fetchCurrencyForCountry(name);
+
     const country = await Country.create({
       name,
       status,
+      currency: currency || { code: '', name: '', symbol: '' },
       seller: req.user._id,
     });
 
@@ -104,9 +128,16 @@ const updateCountry = async (req, res, next) => {
       }
     }
 
+    // Re-fetch currency if name changed or currency is missing
+    let currency = country.currency;
+    if ((name && name !== country.name) || !country.currency?.code) {
+      const fetched = await fetchCurrencyForCountry(name || country.name);
+      if (fetched) currency = fetched;
+    }
+
     country = await Country.findByIdAndUpdate(
       req.params.id,
-      { name, status },
+      { name, status, currency },
       { new: true, runValidators: true }
     );
 

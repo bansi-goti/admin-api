@@ -109,20 +109,22 @@ const updateAdvertisement = async (req, res, next) => {
     const updates = { ...req.body };
     const mediaFiles = req.files || [];
 
-    // If new files are uploaded, append or replace media logic
-    // Currently, the UI replaces specific media types. To be safe, if files exist, we add them.
-    if (mediaFiles.length > 0) {
-      const newMedia = mediaFiles.map(file => {
-        const fileType = file.mimetype.startsWith('video/') ? 'video' : 'image';
-        return {
-          url: file.filename,
-          type: fileType
-        };
-      });
-      // Simple override logic: if we upload new media, we replace old media of the same type.
-      // Since the UI doesn't track old media precisely in FormData, we can just replace the entire array or append.
-      // Assuming frontend sends all required files if it changes anything. Let's just append for simplicity.
-      updates.media = [...ad.media, ...newMedia];
+    let existingMedia = [];
+    if (req.body.existingMedia) {
+      const em = req.body.existingMedia;
+      existingMedia = Array.isArray(em) ? em.map(m => JSON.parse(m)) : [JSON.parse(em)];
+    }
+
+    const newMedia = mediaFiles.map(file => {
+      const fileType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+      return {
+        url: file.filename,
+        type: fileType
+      };
+    });
+
+    if (req.body.existingMedia || mediaFiles.length > 0) {
+      updates.media = [...existingMedia, ...newMedia];
     }
 
     if (updates.startDate && updates.startTime && updates.endDate && updates.endTime) {
@@ -178,9 +180,46 @@ const deleteAdvertisement = async (req, res, next) => {
   }
 };
 
+// @desc    Toggle advertisement status (Pause / Resume)
+// @route   PATCH /api/advertisements/:id/status
+// @access  Private
+const toggleAdvertisementStatus = async (req, res, next) => {
+  try {
+    const ad = await Advertisement.findById(req.params.id);
+    if (!ad) {
+      return res.status(404).json({ success: false, message: 'Advertisement not found' });
+    }
+
+    // If Paused → resume to calculated status based on dates
+    // If Active/Scheduled → pause it (set to Draft)
+    let newStatus;
+    if (ad.status === 'Draft') {
+      // Resume: calculate real status based on dates
+      newStatus = calculateStatus(ad.startDate, ad.startTime, ad.endDate, ad.endTime);
+    } else if (ad.status === 'Ended') {
+      return res.status(400).json({ success: false, message: 'Ended advertisements cannot be restarted' });
+    } else {
+      // Pause: set to Draft
+      newStatus = 'Draft';
+    }
+
+    ad.status = newStatus;
+    await ad.save();
+
+    res.status(200).json({
+      success: true,
+      data: ad,
+      message: newStatus === 'Draft' ? 'Advertisement paused' : 'Advertisement resumed',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllAdvertisements,
   createAdvertisement,
   updateAdvertisement,
   deleteAdvertisement,
+  toggleAdvertisementStatus,
 };
