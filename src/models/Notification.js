@@ -21,7 +21,8 @@ const notificationSchema = new mongoose.Schema({
   seller: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false,
+    default: null,
   }
 }, {
   timestamps: true,
