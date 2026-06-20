@@ -147,3 +147,50 @@ exports.getInventoryOverview = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error fetching inventory stats' });
   }
 };
+
+exports.addInventory = async (req, res) => {
+  try {
+    const { productId, quantity } = req.body;
+    
+    if (!productId || !quantity || isNaN(quantity)) {
+      return res.status(400).json({ success: false, message: 'Please provide valid product ID and quantity' });
+    }
+
+    const product = await Product.findById(productId);
+    
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // RBAC: Verify ownership if not admin
+    if (req.user && req.user.role !== 'admin' && product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to modify this product' });
+    }
+
+    const qtyToAdd = parseInt(quantity);
+    
+    product.stock = (product.stock || 0) + qtyToAdd;
+    if (product.totalStock !== undefined) {
+      product.totalStock = (product.totalStock || 0) + qtyToAdd;
+    }
+    
+    // Update status if it was out of stock
+    if (product.stock > 0 && product.status === 'Out of Stock') {
+      product.status = 'In Stock';
+    } else if (product.stock <= 10 && product.stock > 0) {
+      // Could be Low Stock
+    }
+
+    await product.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully added ${qtyToAdd} to inventory`,
+      data: product
+    });
+
+  } catch (error) {
+    console.error('Error adding inventory:', error);
+    res.status(500).json({ success: false, message: 'Server error adding inventory' });
+  }
+};

@@ -287,10 +287,57 @@ const getOrderMetrics = async (req, res, next) => {
   }
 };
 
+// @desc    Create new order
+// @route   POST /api/orders
+// @access  Private
+const createOrder = async (req, res, next) => {
+  try {
+    const { customer, items, totalAmount, paymentMethod } = req.body;
+
+    if (!customer || !customer.name) {
+      return res.status(400).json({ success: false, message: 'Customer name is required' });
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Order items are required' });
+    }
+
+    // Generate a unique order ID
+    const orderId = 'ORD-' + Date.now().toString().slice(-6) + Math.floor(1000 + Math.random() * 9000);
+
+    // If totalAmount is not provided, calculate it from items
+    let finalTotalAmount = totalAmount;
+    if (finalTotalAmount === undefined || finalTotalAmount === null) {
+      finalTotalAmount = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    }
+
+    const order = await Order.create({
+      seller: req.user._id,
+      orderId,
+      customer,
+      items,
+      totalAmount: finalTotalAmount,
+      paymentMethod: paymentMethod || 'Cash',
+      status: 'Processing',
+      sellerEarning: finalTotalAmount * 0.85, // Default 85% earning
+      profit: finalTotalAmount * 0.15, // Default 15% profit
+    });
+
+    res.status(201).json({
+      success: true,
+      data: order,
+      message: 'Order created successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllOrders,
   getOrderById,
   getOrderMetrics,
   updateOrderStatus,
   deleteOrder,
+  createOrder,
 };

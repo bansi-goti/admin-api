@@ -5,6 +5,7 @@ const {
   getOrderMetrics,
   updateOrderStatus,
   deleteOrder,
+  createOrder,
 } = require('../controllers/orderController');
 const { protect } = require('../middlewares/authMiddleware');
 
@@ -46,8 +47,50 @@ const router = express.Router();
  *         description: List of orders
  *       401:
  *         description: Unauthorized
+ *   post:
+ *     summary: Create a new order
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - customer
+ *               - items
+ *             properties:
+ *               customer:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   email:
+ *                     type: string
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     product:
+ *                       type: string
+ *                     quantity:
+ *                       type: number
+ *                     price:
+ *                       type: number
+ *               totalAmount:
+ *                 type: number
+ *               paymentMethod:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Order created successfully
+ *       400:
+ *         description: Invalid input
  */
-router.route('/').get(protect, getAllOrders);
+router.route('/').get(protect, getAllOrders).post(protect, createOrder);
 
 /**
  * @swagger

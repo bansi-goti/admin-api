@@ -49,7 +49,7 @@ const loginUser = async (req, res, next) => {
 // @access  Public
 const registerUser = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     if (!email || !password) {
       res.status(400);
@@ -62,11 +62,21 @@ const registerUser = async (req, res, next) => {
       throw new Error('User already exists');
     }
 
-    // Enforce that register API only creates 'user'
+    // Determine role
+    let assignedRole = 'user';
+    if (role === 'admin') {
+      const adminExists = await User.findOne({ role: 'admin' });
+      if (!adminExists) {
+        assignedRole = 'admin';
+      }
+    } else if (role) {
+      assignedRole = role;
+    }
+
     const user = await User.create({
       email,
       password,
-      role: 'user',
+      role: assignedRole,
     });
 
     res.status(201).json({
