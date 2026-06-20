@@ -176,3 +176,38 @@ exports.getProductReviews = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error fetching product reviews' });
   }
 };
+
+exports.createReview = async (req, res) => {
+  try {
+    const { productId, customerId, rating, comment, images } = req.body;
+
+    if (!productId || !rating) {
+      return res.status(400).json({ success: false, message: 'Product ID and rating are required' });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5' });
+    }
+
+    // Default to the logged-in user if customerId is not explicitly provided in the body
+    const finalCustomerId = customerId || req.user._id;
+
+    const review = await Review.create({
+      customerId: finalCustomerId,
+      productId,
+      rating,
+      comment,
+      images: images || [],
+      status: 'pending', // default status
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Review created successfully',
+      data: review
+    });
+  } catch (error) {
+    console.error('Error creating review:', error);
+    res.status(500).json({ success: false, message: 'Server error creating review', error: error.message });
+  }
+};
