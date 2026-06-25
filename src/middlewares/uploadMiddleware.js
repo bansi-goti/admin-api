@@ -23,10 +23,8 @@ const storage = multer.diskStorage({
 
 // File validation
 const fileFilter = (req, file, cb) => {
-  // Allow images, and allow video for 'video' field
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else if (file.fieldname === 'video' && file.mimetype.startsWith('video/')) {
+  // Allow images and videos
+  if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
     cb(null, true);
   } else {
     cb(new Error('Invalid file type! Please upload an image or video file.'), false);

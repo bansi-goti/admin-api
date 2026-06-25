@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { uploadImages, getImages } = require('../controllers/subAdminImageController');
+const { uploadImages, getImages, deleteImage } = require('../controllers/subAdminImageController');
 const { protect } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/uploadMiddleware');
 
@@ -9,5 +9,6 @@ const upload = require('../middlewares/uploadMiddleware');
 // but for now relying on protect and frontend role check is sufficient).
 router.route('/upload').post(protect, upload.array('images', 10), uploadImages);
 router.route('/').get(protect, getImages);
+router.route('/:id').delete(protect, deleteImage);
 
 module.exports = router;
