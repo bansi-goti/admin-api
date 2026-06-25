@@ -1,29 +1,11 @@
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
 const Product = require('./src/models/Product');
-const Order = require('./src/models/Order');
+const dotenv = require('dotenv');
 
 dotenv.config();
 
-async function testDB() {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('MongoDB connected');
-    
-    const productCount = await Product.countDocuments();
-    const orderCount = await Order.countDocuments();
-    
-    console.log('Total Products in DB:', productCount);
-    console.log('Total Orders in DB:', orderCount);
-    
-    const firstProduct = await Product.findOne();
-    console.log('First Product:', firstProduct);
-    
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/nayzora').then(async () => {
+    const products = await Product.find().sort({ createdAt: -1 }).limit(3);
+    console.log(JSON.stringify(products, null, 2));
     process.exit(0);
-  } catch (error) {
-    console.error('Error:', error);
-    process.exit(1);
-  }
-}
-
-testDB();
+});

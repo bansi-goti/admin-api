@@ -499,6 +499,7 @@ const bulkCreateProducts = async (req, res, next) => {
         sku,
         price,
         stock: isNaN(parseInt(item.stock)) ? 0 : parseInt(item.stock),
+        category: item.category || undefined,
         productId: item.productId || sku.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
         productType: item.productType || 'simple',
         description: item.description || '',
@@ -511,7 +512,24 @@ const bulkCreateProducts = async (req, res, next) => {
         metaTitle: item.metaTitle || '',
         metaDescription: item.metaDescription || '',
         focusKeyword: item.focusKeyword || '',
-        status: 'Pending'
+        status: 'Pending',
+        mainImage: item.mainImage || '',
+        gallery: Array.isArray(item.gallery) ? item.gallery : [],
+        threeSixtyImages: Array.isArray(item.threeSixtyImages) ? item.threeSixtyImages : [],
+        videoUrl: item.videoUrl || '',
+        subcategory: item.subcategory || '',
+        discountPercentage: isNaN(parseFloat(item.discountPercentage)) ? 0 : parseFloat(item.discountPercentage),
+        enableInternationalPricing: item.enableInternationalPricing === true,
+        enableInternationalShipping: item.enableInternationalShipping === true,
+        shippingType: item.shippingType || '',
+        variants: Array.isArray(item.variants) ? item.variants : [],
+        countryPricing: Array.isArray(item.countryPricing) ? item.countryPricing : [],
+        countryShipping: Array.isArray(item.countryShipping) ? item.countryShipping : [],
+        enable360: item.enable360 === true,
+        showOnHomepage: item.showOnHomepage === true,
+        isFeatured: item.isFeatured === true,
+        isTrending: item.isTrending === true,
+        tags: Array.isArray(item.tags) ? item.tags : (item.tags ? [item.tags] : []),
       });
     }
 

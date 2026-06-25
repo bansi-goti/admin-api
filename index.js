@@ -27,6 +27,7 @@ const uploadRoutes = require('./src/routes/uploadRoutes');
 const couponRoutes = require('./src/routes/couponRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
 const userRoutes = require('./src/routes/userRoutes');
+const subAdminImageRoutes = require('./src/routes/subAdminImageRoutes');
 const path = require('path');
 
 // Load env vars
@@ -65,6 +66,7 @@ app.use('/api/shipping', shippingRoutes);
 app.use('/api/earnings', earningsRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/subadmin-images', subAdminImageRoutes);
 
 app.get('/api/debug-customers', async (req, res) => {
   try {
