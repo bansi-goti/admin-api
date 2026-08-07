@@ -16,6 +16,14 @@ const removeFile = (filePath) => {
 // @access  Private
 const getAllCategories = async (req, res) => {
   try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection offline. Please whitelist your IP address in MongoDB Atlas (https://cloud.mongodb.com -> Security -> Network Access -> Add IP 0.0.0.0/0).'
+      });
+    }
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.page_size) || 10;
     const search = req.query.search || '';
@@ -57,17 +65,29 @@ const getAllCategories = async (req, res) => {
 };
 
 // @desc    Get single category by ID
+// @desc    Get single category by ID or Name
 // @route   GET /api/categories/:id
-// @access  Private
+// @access  Public / Private
 const getCategoryById = async (req, res) => {
   try {
-    const category = await Category.findOne({ _id: req.params.id, seller: req.user._id });
+    const mongoose = require('mongoose');
+    let category = null;
+
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      category = await Category.findById(req.params.id);
+    } else {
+      category = await Category.findOne({ name: { $regex: new RegExp(`^${req.params.id}$`, 'i') } });
+    }
 
     if (!category) {
       return res.status(404).json({ message: 'Category not found' });
     }
 
-    res.status(200).json({ success: true, data: category });
+    const count = await Product.countDocuments({ category: category._id });
+    const categoryObj = category.toObject ? category.toObject() : category;
+    categoryObj.productsCount = count;
+
+    res.status(200).json({ success: true, data: categoryObj });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

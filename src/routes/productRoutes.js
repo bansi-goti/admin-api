@@ -8,7 +8,7 @@ const {
   deleteProduct,
   bulkCreateProducts,
 } = require('../controllers/productController');
-const { protect } = require('../middlewares/authMiddleware');
+const { protect, optionalProtect } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/uploadMiddleware');
 
 const router = express.Router();
@@ -57,7 +57,7 @@ const productUpload = upload.fields([
  *       401:
  *         description: Unauthorized
  */
-router.route('/').get(protect, getAllProducts);
+router.route('/').get(optionalProtect, getAllProducts);
 
 /**
  * @swagger
@@ -132,7 +132,7 @@ router.route('/bulk').post(protect, bulkCreateProducts);
  *       404:
  *         description: Product not found
  */
-router.route('/:id').get(protect, getProductById);
+router.route('/:id').get(optionalProtect, getProductById);
 
 /**
  * @swagger
@@ -187,7 +187,7 @@ router.route('/:id/status').patch(protect, updateProductStatus);
  *         description: Product not found
  */
 router.route('/:id')
-  .get(protect, getProductById)
+  .get(optionalProtect, getProductById)
   .put(protect, productUpload, updateProduct)
   .delete(protect, deleteProduct);
 

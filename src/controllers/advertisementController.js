@@ -216,8 +216,70 @@ const toggleAdvertisementStatus = async (req, res, next) => {
   }
 };
 
+// @desc    Get active public hero banners for homepage slider
+// @route   GET /api/advertisements/public
+// @access  Public
+const getPublicBanners = async (req, res, next) => {
+  try {
+    const ads = await Advertisement.find({ status: { $in: ['Active', 'Approved', 'Scheduled'] } })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const slideMeta = [
+      {
+        tag: "PURELY HAND-CRAFTED",
+        title: "TIMELESS ELEGANCE",
+        subtitle: "Premium Collection",
+        desc: "Experience luxury with our handcrafted jewelry pieces.\nEach piece is a masterpiece of artistry."
+      },
+      {
+        tag: "EXQUISITE CRAFTSMANSHIP",
+        title: "ROYAL SPLENDOR",
+        subtitle: "Elite Masterpieces",
+        desc: "Indulge in the finest collections designed for royalty.\nCrafted to make every moment unforgettable."
+      },
+      {
+        tag: "TEMPTING BEAUTY",
+        title: "GOLDEN HERITAGE",
+        subtitle: "Signature Creations",
+        desc: "Discover our heritage of pure gold and gemstone settings.\nThe ultimate expression of luxury."
+      }
+    ];
+
+    const slides = [];
+    if (ads.length > 0) {
+      let idx = 0;
+      ads.forEach((ad) => {
+        const mediaList = Array.isArray(ad.media) ? ad.media : [];
+        mediaList.forEach((m) => {
+          const meta = slideMeta[idx % slideMeta.length];
+          slides.push({
+            id: String(ad._id),
+            title: ad.title && ad.title !== 'string' ? ad.title : meta.title,
+            tag: meta.tag,
+            subtitle: meta.subtitle,
+            desc: meta.desc,
+            type: m.type === 'video' ? 'video' : 'image',
+            src: m.url,
+          });
+          idx++;
+        });
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      count: slides.length,
+      data: slides,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllAdvertisements,
+  getPublicBanners,
   createAdvertisement,
   updateAdvertisement,
   deleteAdvertisement,

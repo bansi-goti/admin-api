@@ -36,6 +36,7 @@ const loginUser = async (req, res, next) => {
       code: 200,
       _id: user._id,
       email: user.email,
+      name: user.name || '',
       role: user.role,
       token: generateToken(user._id),
     });
@@ -49,7 +50,7 @@ const loginUser = async (req, res, next) => {
 // @access  Public
 const registerUser = async (req, res, next) => {
   try {
-    const { email, password, role } = req.body;
+    const { email, password, role, name, fullName, phone } = req.body;
 
     if (!email || !password) {
       res.status(400);
@@ -59,7 +60,7 @@ const registerUser = async (req, res, next) => {
     const userExists = await User.findOne({ email });
     if (userExists) {
       res.status(400);
-      throw new Error('User already exists');
+      throw new Error('User already exists with this email');
     }
 
     // Determine role
@@ -73,9 +74,13 @@ const registerUser = async (req, res, next) => {
       assignedRole = role;
     }
 
+    const userName = name || fullName || '';
+
     const user = await User.create({
       email,
       password,
+      name: userName,
+      phone: phone || '',
       role: assignedRole,
     });
 
@@ -83,6 +88,7 @@ const registerUser = async (req, res, next) => {
       code: 201,
       _id: user._id,
       email: user.email,
+      name: user.name || '',
       role: user.role,
       token: generateToken(user._id),
     });

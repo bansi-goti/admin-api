@@ -177,6 +177,25 @@ exports.getProductReviews = async (req, res) => {
   }
 };
 
+exports.getFeaturedReviews = async (req, res) => {
+  try {
+    const reviews = await Review.find({ status: 'approved' })
+      .populate('customerId', 'name avatar email location')
+      .populate('productId', 'name mainImage')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      count: reviews.length,
+      data: reviews,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error fetching featured reviews' });
+  }
+};
+
 exports.createReview = async (req, res) => {
   try {
     const { productId, customerId, rating, comment, images } = req.body;

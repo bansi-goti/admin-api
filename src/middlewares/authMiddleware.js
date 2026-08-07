@@ -9,32 +9,44 @@ const protect = async (req, res, next) => {
     req.headers.authorization.startsWith('Bearer')
   ) {
     try {
-      // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      if (!token || token === 'undefined' || token === 'null') {
+        return res.status(401).json({ success: false, message: 'Not authorized, invalid token' });
+      }
 
-      // Get user from the token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = await User.findById(decoded.id).select('-password');
 
       if (!req.user) {
-        res.status(401);
-        throw new Error('Not authorized, user not found');
+        return res.status(401).json({ success: false, message: 'Not authorized, user not found' });
       }
 
-      next();
+      return next();
     } catch (error) {
-      console.error(error);
-      res.status(401);
-      next(new Error('Not authorized, token failed'));
+      return res.status(401).json({ success: false, message: 'Not authorized, token expired or invalid' });
     }
   }
 
   if (!token) {
-    res.status(401);
-    next(new Error('Not authorized, no token'));
+    return res.status(401).json({ success: false, message: 'Not authorized, no token provided' });
   }
 };
 
-module.exports = { protect };
+const optionalProtect = async (req, res, next) => {
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = await User.findById(decoded.id).select('-password');
+    } catch (error) {
+      // Ignore token failure for public access
+    }
+  }
+  next();
+};
+
+module.exports = { protect, optionalProtect };

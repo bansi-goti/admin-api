@@ -49,8 +49,12 @@ const getAllOrders = async (req, res, next) => {
     const search = req.query.search || '';
 
     const query = {};
-    if (req.user.role !== 'admin') {
-      query.seller = req.user._id;
+    if (req.user) {
+      if (req.user.role === 'user') {
+        query['customer.email'] = req.user.email;
+      } else if (req.user.role !== 'admin') {
+        query.seller = req.user._id;
+      }
     }
 
     if (req.query.customerId) {
@@ -311,10 +315,21 @@ const createOrder = async (req, res, next) => {
       finalTotalAmount = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     }
 
+    const User = require('../models/User');
+    let sellerId = req.user._id;
+    if (req.user.role === 'user') {
+      const adminUser = await User.findOne({ role: 'admin' });
+      if (adminUser) sellerId = adminUser._id;
+    }
+
     const order = await Order.create({
-      seller: req.user._id,
+      seller: sellerId,
       orderId,
-      customer,
+      customer: {
+        name: customer.name,
+        email: customer.email || req.user.email,
+        ...customer
+      },
       items,
       totalAmount: finalTotalAmount,
       paymentMethod: paymentMethod || 'Cash',

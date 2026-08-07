@@ -18,7 +18,6 @@ const {
  *   description: Category management for products
  */
 
-router.use(protect);
 
 /**
  * @swagger
@@ -79,7 +78,7 @@ router.use(protect);
  */
 router.route('/')
   .get(getAllCategories)
-  .post(createCategory);
+  .post(protect, createCategory);
 
 /**
  * @swagger
@@ -155,8 +154,8 @@ router.route('/')
  */
 router.route('/:id')
   .get(getCategoryById)
-  .put(updateCategory)
-  .delete(deleteCategory);
+  .put(protect, updateCategory)
+  .delete(protect, deleteCategory);
 
 /**
  * @swagger
@@ -194,6 +193,6 @@ router.route('/:id')
  *         description: Category not found
  */
 router.route('/:id/status')
-  .patch(updateCategoryStatus);
+  .patch(protect, updateCategoryStatus);
 
 module.exports = router;

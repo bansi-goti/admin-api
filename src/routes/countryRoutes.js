@@ -10,6 +10,9 @@ const { protect } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 
+// PUBLIC COUNTRY & CURRENCY ROUTE
+router.get('/public', getAllCountries);
+
 /**
  * @swagger
  * tags:

@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   getAllAdvertisements,
+  getPublicBanners,
   createAdvertisement,
   updateAdvertisement,
   deleteAdvertisement,
@@ -10,6 +11,9 @@ const { protect } = require('../middlewares/authMiddleware');
 const adUpload = require('../middlewares/adUploadMiddleware');
 
 const router = express.Router();
+
+// PUBLIC BANNER ROUTE
+router.get('/public', getPublicBanners);
 
 /**
  * @swagger

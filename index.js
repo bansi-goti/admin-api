@@ -28,6 +28,7 @@ const couponRoutes = require('./src/routes/couponRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const subAdminImageRoutes = require('./src/routes/subAdminImageRoutes');
+const wishlistRoutes = require('./src/routes/wishlistRoutes');
 const path = require('path');
 
 // Load env vars
@@ -67,6 +68,7 @@ app.use('/api/earnings', earningsRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/subadmin-images', subAdminImageRoutes);
+app.use('/api/wishlist', wishlistRoutes);
 
 app.get('/api/debug-customers', async (req, res) => {
   try {
@@ -108,7 +110,7 @@ app.get('/api/debug-customers', async (req, res) => {
         data: customersWithStats,
       },
     });
-  } catch(e) { res.status(500).json({e: e.message}) }
+  } catch (e) { res.status(500).json({ e: e.message }) }
 });
 
 // Static file serving for uploads

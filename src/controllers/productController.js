@@ -1,13 +1,24 @@
 const Product = require('../models/Product');
+const Category = require('../models/Category');
+const mongoose = require('mongoose');
 
-// @desc    Get all products (with pagination & search)
-// @route   GET /api/products
-// @access  Private
 const getAllProducts = async (req, res, next) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection offline. Please whitelist your IP address in MongoDB Atlas (https://cloud.mongodb.com -> Security -> Network Access -> Add IP 0.0.0.0/0).'
+      });
+    }
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.page_size) || 10;
     const search = req.query.search || '';
+    const categoryParam = req.query.category;
+    const subcategoryParam = req.query.subcategory;
+    const isFeaturedParam = req.query.isFeatured;
+    const isTrendingParam = req.query.isTrending;
+    const statusParam = req.query.status;
 
     const query = {};
     if (search) {
@@ -17,7 +28,34 @@ const getAllProducts = async (req, res, next) => {
       ];
     }
 
-    // RBAC: If user is not admin, they only see their own products
+    if (statusParam) {
+      query.status = statusParam;
+    }
+
+    if (isFeaturedParam !== undefined) {
+      query.isFeatured = isFeaturedParam === 'true' || isFeaturedParam === true;
+    }
+
+    if (isTrendingParam !== undefined) {
+      query.isTrending = isTrendingParam === 'true' || isTrendingParam === true;
+    }
+
+    if (subcategoryParam) {
+      query.subcategory = { $regex: subcategoryParam, $options: 'i' };
+    }
+
+    if (categoryParam) {
+      if (mongoose.Types.ObjectId.isValid(categoryParam)) {
+        query.category = categoryParam;
+      } else {
+        const matchedCats = await Category.find({ name: { $regex: categoryParam, $options: 'i' } });
+        if (matchedCats.length > 0) {
+          query.category = { $in: matchedCats.map(c => c._id) };
+        }
+      }
+    }
+
+    // RBAC: If user is authenticated and not admin, they only see their own products
     if (req.user && req.user.role !== 'admin') {
       query.seller = req.user._id;
     }
@@ -32,13 +70,33 @@ const getAllProducts = async (req, res, next) => {
       .skip(startIndex)
       .limit(limit);
 
+    const Review = require('../models/Review');
+    const productsWithReviews = await Promise.all(
+      products.map(async (prod) => {
+        const prodObj = prod.toObject();
+        const reviews = await Review.find({ productId: prod._id, status: { $ne: 'rejected' } });
+        const numReviews = reviews.length;
+        let avgRating = 0;
+        if (numReviews > 0) {
+          const sum = reviews.reduce((acc, item) => acc + (item.rating || 0), 0);
+          avgRating = Number((sum / numReviews).toFixed(1));
+        } else if (typeof prod.rating === 'number' && prod.rating > 0) {
+          avgRating = prod.rating;
+        }
+        prodObj.rating = avgRating;
+        prodObj.ratingScore = avgRating > 0 ? avgRating.toFixed(1) : '0.0';
+        prodObj.reviewCount = numReviews;
+        return prodObj;
+      })
+    );
+
     res.status(200).json({
       success: true,
       data: {
         totalData: total,
         totalPages: Math.ceil(total / limit),
         currentPage: page,
-        data: products,
+        data: productsWithReviews,
       },
     });
   } catch (error) {
@@ -52,26 +110,56 @@ const getAllProducts = async (req, res, next) => {
 const getProductById = async (req, res, next) => {
   try {
     const mongoose = require('mongoose');
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(404).json({ success: false, message: 'Product not found (Invalid ID format)' });
+    const Review = require('../models/Review');
+    let product = null;
+
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      product = await Product.findById(req.params.id)
+        .populate('seller', 'name email username fullName')
+        .populate('category', 'name');
     }
 
-    const product = await Product.findById(req.params.id)
-      .populate('seller', 'name email username fullName')
-      .populate('category', 'name');
+    if (!product) {
+      product = await Product.findOne({
+        $or: [
+          { productId: req.params.id },
+          { sku: req.params.id }
+        ]
+      })
+        .populate('seller', 'name email username fullName')
+        .populate('category', 'name');
+    }
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
     // RBAC: Verify ownership if not admin
-    if (req.user && req.user.role !== 'admin' && product.seller._id.toString() !== req.user._id.toString()) {
+    if (req.user && req.user.role !== 'admin' && product.seller && product.seller._id && product.seller._id.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized to access this product' });
     }
 
+    const productObj = product.toObject();
+    
+    // Calculate real rating & reviewCount from Review collection
+    const reviews = await Review.find({ productId: product._id, status: { $ne: 'rejected' } });
+    const numReviews = reviews.length;
+    let avgRating = 0;
+
+    if (numReviews > 0) {
+      const sum = reviews.reduce((acc, item) => acc + (item.rating || 0), 0);
+      avgRating = Number((sum / numReviews).toFixed(1));
+    } else if (typeof product.rating === 'number' && product.rating > 0) {
+      avgRating = product.rating;
+    }
+
+    productObj.rating = avgRating;
+    productObj.ratingScore = avgRating > 0 ? avgRating.toFixed(1) : '0.0';
+    productObj.reviewCount = numReviews;
+
     res.status(200).json({
       success: true,
-      data: product,
+      data: productObj,
     });
   } catch (error) {
     next(error);
