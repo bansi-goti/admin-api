@@ -217,10 +217,109 @@ const deleteCoupon = async (req, res, next) => {
   }
 };
 
+// @desc    Validate/Apply a coupon code (Public)
+// @route   POST /api/coupons/validate
+// @access  Public
+const validateCoupon = async (req, res, next) => {
+  try {
+    const { code, cartTotal = 0 } = req.body;
+
+    if (!code || typeof code !== 'string' || !code.trim()) {
+      return res.status(400).json({ success: false, message: 'Please enter a promo code.' });
+    }
+
+    const cleanCode = code.trim().toUpperCase();
+
+    // Check if code matches any active coupon in database
+    let coupon = await Coupon.findOne({ code: cleanCode });
+
+    // Fallback support for standard site-wide codes (e.g. NAYZORA10, ROYAL10, LUXURY20, WELCOME10)
+    if (!coupon && (cleanCode === 'NAYZORA10' || cleanCode === 'ROYAL10' || cleanCode === 'LUXURY20' || cleanCode === 'WELCOME10')) {
+      const percent = cleanCode === 'LUXURY20' ? 20 : 10;
+      const discountAmount = (cartTotal * percent) / 100;
+      return res.status(200).json({
+        success: true,
+        message: `🎉 Promo code "${cleanCode}" applied successfully!`,
+        data: {
+          code: cleanCode,
+          discountType: 'Percentage (%)',
+          discountValue: percent,
+          percent: percent,
+          discountAmount: Math.round(discountAmount * 100) / 100,
+        },
+      });
+    }
+
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: `Invalid promo code "${cleanCode}". Try NAYZORA10 for 10% OFF!`,
+      });
+    }
+
+    // Status check
+    const status = getStatus(coupon);
+    if (status === 'Expired') {
+      return res.status(400).json({
+        success: false,
+        message: `Promo code "${cleanCode}" has expired.`,
+      });
+    }
+    if (status === 'Scheduled') {
+      return res.status(400).json({
+        success: false,
+        message: `Promo code "${cleanCode}" is not active yet.`,
+      });
+    }
+
+    // Min Order Check
+    if (coupon.minOrder > 0 && cartTotal < coupon.minOrder) {
+      return res.status(400).json({
+        success: false,
+        message: `Minimum order amount of ₹${coupon.minOrder.toLocaleString('en-IN')} required for code "${cleanCode}".`,
+      });
+    }
+
+    // Calculate discount amount
+    let discountAmount = 0;
+    let percent = 0;
+
+    if (coupon.discountType === 'Percentage (%)') {
+      percent = coupon.discountValue;
+      discountAmount = (cartTotal * coupon.discountValue) / 100;
+      if (coupon.maxDiscount > 0 && discountAmount > coupon.maxDiscount) {
+        discountAmount = coupon.maxDiscount;
+      }
+    } else if (coupon.discountType === 'Fixed Amount (₹)') {
+      discountAmount = Math.min(cartTotal, coupon.discountValue);
+      percent = cartTotal > 0 ? Math.round((discountAmount / cartTotal) * 100) : 0;
+    } else if (coupon.discountType === 'Free Shipping') {
+      discountAmount = 0;
+      percent = 0;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `🎉 Promo code "${coupon.code}" applied! Saved ${percent > 0 ? percent + '%' : 'extra'}.`,
+      data: {
+        code: coupon.code,
+        name: coupon.name,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        percent: percent > 0 ? percent : (cartTotal > 0 ? Math.round((discountAmount / cartTotal) * 100) : 10),
+        discountAmount: Math.round(discountAmount * 100) / 100,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createCoupon,
   getCoupons,
   getCouponStats,
   updateCoupon,
-  deleteCoupon
+  deleteCoupon,
+  validateCoupon,
 };

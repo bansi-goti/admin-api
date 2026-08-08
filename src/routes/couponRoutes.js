@@ -1,8 +1,11 @@
 const express = require('express');
-const { createCoupon, getCoupons, getCouponStats, updateCoupon, deleteCoupon } = require('../controllers/couponController');
+const { createCoupon, getCoupons, getCouponStats, updateCoupon, deleteCoupon, validateCoupon } = require('../controllers/couponController');
 const { protect } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
+
+// Public coupon validation endpoint
+router.route('/validate').post(validateCoupon);
 
 /**
  * @swagger

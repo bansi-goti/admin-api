@@ -29,6 +29,8 @@ const notificationRoutes = require('./src/routes/notificationRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const subAdminImageRoutes = require('./src/routes/subAdminImageRoutes');
 const wishlistRoutes = require('./src/routes/wishlistRoutes');
+const contactRoutes = require('./src/routes/contactRoutes');
+const addressRoutes = require('./src/routes/addressRoutes');
 const path = require('path');
 
 // Load env vars
@@ -69,6 +71,8 @@ app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/subadmin-images', subAdminImageRoutes);
 app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/addresses', addressRoutes);
 
 app.get('/api/debug-customers', async (req, res) => {
   try {
