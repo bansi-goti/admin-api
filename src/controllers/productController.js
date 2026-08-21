@@ -55,8 +55,8 @@ const getAllProducts = async (req, res, next) => {
       }
     }
 
-    // RBAC: If user is authenticated and not admin, they only see their own products
-    if (req.user && req.user.role !== 'admin') {
+    // RBAC: If user is authenticated as seller, they only see their own products
+    if (req.user && (req.user.uiRole === 'seller' || req.user.role === 'seller')) {
       query.seller = req.user._id;
     }
 

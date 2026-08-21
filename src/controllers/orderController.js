@@ -50,10 +50,10 @@ const getAllOrders = async (req, res, next) => {
 
     const query = {};
     if (req.user) {
-      if (req.user.role === 'user') {
-        query['customer.email'] = req.user.email;
-      } else if (req.user.role !== 'admin') {
+      if (req.user.uiRole === 'seller' || req.user.role === 'seller') {
         query.seller = req.user._id;
+      } else if (req.user.role === 'user') {
+        query['customer.email'] = req.user.email;
       }
     }
 
@@ -197,7 +197,7 @@ const getOrderMetrics = async (req, res, next) => {
 
     const today = new Date();
     today.setHours(23, 59, 59, 999);
-    
+
     const startDate = new Date(today);
     startDate.setDate(today.getDate() - days);
     startDate.setHours(0, 0, 0, 0);
@@ -249,7 +249,7 @@ const getOrderMetrics = async (req, res, next) => {
         const label = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
         map[label] = 0;
       }
-      
+
       ordersList.forEach(o => {
         const d = new Date(o.createdAt);
         const label = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
@@ -309,17 +309,33 @@ const createOrder = async (req, res, next) => {
     // Generate a unique order ID
     const orderId = 'ORD-' + Date.now().toString().slice(-6) + Math.floor(1000 + Math.random() * 9000);
 
-    // If totalAmount is not provided, calculate it from items
     let finalTotalAmount = totalAmount;
     if (finalTotalAmount === undefined || finalTotalAmount === null) {
       finalTotalAmount = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     }
 
     const User = require('../models/User');
-    let sellerId = req.user._id;
-    if (req.user.role === 'user') {
-      const adminUser = await User.findOne({ role: 'admin' });
-      if (adminUser) sellerId = adminUser._id;
+    const Product = require('../models/Product');
+    let sellerId;
+
+    if (items && items.length > 0 && items[0].product) {
+      try {
+        const prod = await Product.findById(items[0].product);
+        if (prod && prod.seller) {
+          sellerId = prod.seller;
+        }
+      } catch (e) {
+        // Fallback if product lookup fails
+      }
+    }
+
+    if (!sellerId) {
+      if (req.user && (req.user.uiRole === 'seller' || req.user.role === 'seller')) {
+        sellerId = req.user._id;
+      } else {
+        const adminUser = await User.findOne({ role: 'admin' });
+        if (adminUser) sellerId = adminUser._id;
+      }
     }
 
     const order = await Order.create({
@@ -327,7 +343,7 @@ const createOrder = async (req, res, next) => {
       orderId,
       customer: {
         name: customer.name,
-        email: customer.email || req.user.email,
+        email: customer.email || (req.user ? req.user.email : 'guest@nayzora.com'),
         ...customer
       },
       items,

@@ -1,34 +1,22 @@
 const Category = require('../models/Category');
-const Product = require('../models/Product'); // To calculate productsCount dynamically if virtual doesn't work
+const Product = require('../models/Product');
 const fs = require('fs');
 const path = require('path');
 
-// Helper to remove uploaded file in case of error or update
 const removeFile = (filePath) => {
   if (!filePath) return;
   const fullPath = path.join(__dirname, '../..', filePath);
   if (fs.existsSync(fullPath)) {
-    fs.unlinkSync(fullPath);
+    try { fs.unlinkSync(fullPath); } catch(e) {}
   }
 };
-// @desc    Get all categories with pagination & search
-// @route   GET /api/categories
-// @access  Private
+
 const getAllCategories = async (req, res) => {
   try {
-    const mongoose = require('mongoose');
-    if (mongoose.connection.readyState !== 1) {
-      return res.status(503).json({
-        success: false,
-        message: 'Database connection offline. Please whitelist your IP address in MongoDB Atlas (https://cloud.mongodb.com -> Security -> Network Access -> Add IP 0.0.0.0/0).'
-      });
-    }
-
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.page_size) || 10;
     const search = req.query.search || '';
 
-    // Build query (return all categories for product assignment)
     const query = {};
     if (search) {
       query.name = { $regex: search, $options: 'i' };
@@ -41,7 +29,6 @@ const getAllCategories = async (req, res) => {
       .limit(limit)
       .lean();
 
-    // Attach productsCount dynamically (assuming Product schema doesn't have category field yet, returning 0 for now or calculate if it does)
     const enhancedCategories = await Promise.all(categories.map(async (cat) => {
       const count = await Product.countDocuments({ category: cat._id });
       return {
@@ -64,10 +51,6 @@ const getAllCategories = async (req, res) => {
   }
 };
 
-// @desc    Get single category by ID
-// @desc    Get single category by ID or Name
-// @route   GET /api/categories/:id
-// @access  Public / Private
 const getCategoryById = async (req, res) => {
   try {
     const mongoose = require('mongoose');
@@ -93,25 +76,31 @@ const getCategoryById = async (req, res) => {
   }
 };
 
-// @desc    Create new category
-// @route   POST /api/categories
-// @access  Private
 const createCategory = async (req, res) => {
   try {
-    const { name, description, status } = req.body;
+    const { name, description, status, image } = req.body;
 
-    // Check if category name already exists for this seller
-    const exists = await Category.findOne({ name, seller: req.user._id });
+    const query = { name: { $regex: new RegExp(`^${name}$`, 'i') } };
+    if (req.user && req.user.role !== 'admin') {
+      query.seller = req.user._id;
+    }
+
+    const exists = await Category.findOne(query);
     if (exists) {
       return res.status(400).json({ message: 'Category with this name already exists' });
+    }
+
+    let imagePath = image || '';
+    if (req.file) {
+      imagePath = `/uploads/${req.file.filename}`;
     }
 
     const category = await Category.create({
       name,
       description,
-      image: req.body.image || '',
+      image: imagePath,
       status: status || 'Active',
-      seller: req.user._id
+      seller: req.user ? req.user._id : undefined
     });
 
     res.status(201).json({ success: true, data: category });
@@ -120,13 +109,16 @@ const createCategory = async (req, res) => {
   }
 };
 
-// @desc    Update category
-// @route   PUT /api/categories/:id
-// @access  Private
 const updateCategory = async (req, res) => {
   try {
-    const { name, description, status } = req.body;
-    const category = await Category.findOne({ _id: req.params.id, seller: req.user._id });
+    const { name, description, status, image } = req.body;
+    
+    const query = { _id: req.params.id };
+    if (req.user && req.user.role !== 'admin') {
+      query.seller = req.user._id;
+    }
+
+    const category = await Category.findOne(query);
 
     if (!category) {
       return res.status(404).json({ message: 'Category not found' });
@@ -135,11 +127,15 @@ const updateCategory = async (req, res) => {
     if (name) category.name = name;
     if (description !== undefined) category.description = description;
     if (status) category.status = status;
-    
-    if (req.body.image && req.body.image !== category.image) {
-      // Remove old image
-      removeFile(category.image);
-      category.image = req.body.image;
+
+    let imagePath = image;
+    if (req.file) {
+      imagePath = `/uploads/${req.file.filename}`;
+    }
+
+    if (imagePath !== undefined && imagePath !== category.image) {
+      if (category.image) removeFile(category.image);
+      category.image = imagePath;
     }
 
     await category.save();
@@ -150,17 +146,20 @@ const updateCategory = async (req, res) => {
   }
 };
 
-// @desc    Delete category
-// @route   DELETE /api/categories/:id
-// @access  Private
 const deleteCategory = async (req, res) => {
   try {
-    const category = await Category.findOne({ _id: req.params.id, seller: req.user._id });
+    const query = { _id: req.params.id };
+    if (req.user && req.user.role !== 'admin') {
+      query.seller = req.user._id;
+    }
+
+    const category = await Category.findOne(query);
 
     if (!category) {
       return res.status(404).json({ message: 'Category not found' });
     }
 
+    if (category.image) removeFile(category.image);
     await category.deleteOne();
 
     res.status(200).json({ success: true, message: 'Category removed' });
@@ -169,9 +168,6 @@ const deleteCategory = async (req, res) => {
   }
 };
 
-// @desc    Update category status
-// @route   PATCH /api/categories/:id/status
-// @access  Private
 const updateCategoryStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -180,7 +176,12 @@ const updateCategoryStatus = async (req, res) => {
         return res.status(400).json({ message: 'Invalid status' });
     }
 
-    const category = await Category.findOne({ _id: req.params.id, seller: req.user._id });
+    const query = { _id: req.params.id };
+    if (req.user && req.user.role !== 'admin') {
+      query.seller = req.user._id;
+    }
+
+    const category = await Category.findOne(query);
 
     if (!category) {
       return res.status(404).json({ message: 'Category not found' });

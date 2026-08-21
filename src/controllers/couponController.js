@@ -234,7 +234,7 @@ const validateCoupon = async (req, res, next) => {
     let coupon = await Coupon.findOne({ code: cleanCode });
 
     // Fallback support for standard site-wide codes (e.g. NAYZORA10, ROYAL10, LUXURY20, WELCOME10)
-    if (!coupon && (cleanCode === 'NAYZORA10' || cleanCode === 'ROYAL10' || cleanCode === 'LUXURY20' || cleanCode === 'WELCOME10')) {
+    if (!coupon && (cleanCode === 'NAYZORA10' || cleanCode === 'ROYAL10' || cleanCode === 'LUXURY20' || cleanCode === 'WELCOME10' || cleanCode === 'NAYZORA1000')) {
       const percent = cleanCode === 'LUXURY20' ? 20 : 10;
       const discountAmount = (cartTotal * percent) / 100;
       return res.status(200).json({

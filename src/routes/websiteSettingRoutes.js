@@ -45,7 +45,7 @@ const router = express.Router();
  *         description: Website settings updated
  */
 router.route('/')
-  .get(protect, getWebsiteSettings)
+  .get(getWebsiteSettings)
   .post(protect, upload.single('logo'), updateWebsiteSettings);
 
 module.exports = router;

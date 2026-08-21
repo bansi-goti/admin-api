@@ -11,10 +11,8 @@ const calculateEarnings = async (userId, role) => {
   let pendingPayout = 0;
 
   orders.forEach(order => {
-    if (order.status === 'Delivered' || order.status === 'Completed') {
-      totalEarnings += role === 'admin' ? (order.profit || 0) : (order.sellerEarning || (order.totalAmount * 0.85));
-    } else if (!['Refunded', 'Cancelled', 'Returned'].includes(order.status)) {
-      pendingPayout += role === 'admin' ? (order.profit || 0) : (order.sellerEarning || (order.totalAmount * 0.85));
+    if (!['Refunded', 'Cancelled', 'Returned'].includes(order.status)) {
+      totalEarnings += role === 'admin' ? (order.profit || (order.totalAmount * 0.15)) : (order.sellerEarning || (order.totalAmount * 0.85));
     }
   });
 

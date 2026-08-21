@@ -37,9 +37,17 @@ const userSchema = mongoose.Schema(
     phone: {
       type: String,
     },
+    currency: {
+      type: String,
+      default: 'INR (₹)',
+    },
     twoFactorEnabled: {
       type: Boolean,
       default: false,
+    },
+    authProvider: {
+      type: String,
+      default: 'email',
     },
     status: {
       type: String,

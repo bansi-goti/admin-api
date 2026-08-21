@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middlewares/authMiddleware');
+const upload = require('../middlewares/uploadMiddleware');
 
 const {
   getAllCategories,
@@ -78,7 +79,7 @@ const {
  */
 router.route('/')
   .get(getAllCategories)
-  .post(protect, createCategory);
+  .post(protect, upload.single('image'), createCategory);
 
 /**
  * @swagger
@@ -154,7 +155,7 @@ router.route('/')
  */
 router.route('/:id')
   .get(getCategoryById)
-  .put(protect, updateCategory)
+  .put(protect, upload.single('image'), updateCategory)
   .delete(protect, deleteCategory);
 
 /**

@@ -12,8 +12,9 @@ const updateProfile = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    if (req.body.name) user.name = req.body.name;
-    if (req.body.phone) user.phone = req.body.phone;
+    if (req.body.name !== undefined) user.name = req.body.name;
+    if (req.body.phone !== undefined) user.phone = req.body.phone;
+    if (req.body.currency !== undefined) user.currency = req.body.currency;
 
     if (req.file) {
       // delete old image if it exists and isn't a default
@@ -29,6 +30,7 @@ const updateProfile = async (req, res, next) => {
     const updatedUser = await user.save();
 
     res.status(200).json({
+      code: 200,
       success: true,
       message: 'Profile updated successfully',
       data: {
@@ -38,6 +40,7 @@ const updateProfile = async (req, res, next) => {
         role: updatedUser.role,
         uiRole: updatedUser.uiRole,
         phone: updatedUser.phone,
+        currency: updatedUser.currency || 'INR (₹)',
         profileImage: updatedUser.profileImage,
         twoFactorEnabled: updatedUser.twoFactorEnabled,
       }

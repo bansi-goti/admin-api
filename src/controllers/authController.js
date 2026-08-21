@@ -107,10 +107,12 @@ const getProfile = async (req, res, next) => {
       code: 200,
       _id: user._id,
       email: user.email,
-      name: user.name || (user.role === 'admin' ? 'Admin' : 'Seller'),
+      name: user.name || (user.role === 'admin' ? 'Admin' : 'User'),
       role: user.role,
-      uiRole: user.uiRole || (user.role === 'admin' ? 'manager' : 'seller'),
-      profileImage: user.profileImage || null
+      uiRole: user.uiRole || (user.role === 'admin' ? 'manager' : 'user'),
+      profileImage: user.profileImage || null,
+      phone: user.phone || '',
+      currency: user.currency || 'INR (₹)'
     });
   } catch (error) {
     next(error);

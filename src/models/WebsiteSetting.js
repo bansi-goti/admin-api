@@ -18,6 +18,18 @@ const websiteSettingSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    googleClientId: {
+      type: String,
+      default: '',
+    },
+    googleClientSecret: {
+      type: String,
+      default: '',
+    },
+    isGoogleLoginEnabled: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
