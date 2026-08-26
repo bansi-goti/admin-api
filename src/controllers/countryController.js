@@ -1,22 +1,84 @@
 const Country = require('../models/Country');
 const axios = require('axios');
 
-// Helper: fetch currency info for a country name via restcountries API
+const COUNTRY_CURRENCY_MAP = {
+  'india': { code: 'INR', name: 'Indian Rupee', symbol: '₹', exchangeRate: 1 },
+  'united states': { code: 'USD', name: 'US Dollar', symbol: '$', exchangeRate: 0.012 },
+  'usa': { code: 'USD', name: 'US Dollar', symbol: '$', exchangeRate: 0.012 },
+  'united kingdom': { code: 'GBP', name: 'British Pound', symbol: '£', exchangeRate: 0.0094 },
+  'uk': { code: 'GBP', name: 'British Pound', symbol: '£', exchangeRate: 0.0094 },
+  'european union': { code: 'EUR', name: 'Euro', symbol: '€', exchangeRate: 0.011 },
+  'germany': { code: 'EUR', name: 'Euro', symbol: '€', exchangeRate: 0.011 },
+  'france': { code: 'EUR', name: 'Euro', symbol: '€', exchangeRate: 0.011 },
+  'italy': { code: 'EUR', name: 'Euro', symbol: '€', exchangeRate: 0.011 },
+  'spain': { code: 'EUR', name: 'Euro', symbol: '€', exchangeRate: 0.011 },
+  'united arab emirates': { code: 'AED', name: 'UAE Dirham', symbol: 'AED', exchangeRate: 0.044 },
+  'uae': { code: 'AED', name: 'UAE Dirham', symbol: 'AED', exchangeRate: 0.044 },
+  'canada': { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$', exchangeRate: 0.016 },
+  'australia': { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', exchangeRate: 0.018 },
+  'singapore': { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$', exchangeRate: 0.016 },
+  'saudi arabia': { code: 'SAR', name: 'Saudi Riyal', symbol: 'SAR', exchangeRate: 0.045 },
+  'qatar': { code: 'QAR', name: 'Qatari Riyal', symbol: 'QAR', exchangeRate: 0.044 },
+  'japan': { code: 'JPY', name: 'Japanese Yen', symbol: '¥', exchangeRate: 1.8 },
+};
+
+// Helper: fetch currency info for a country name via restcountries API with dictionary fallback
 const fetchCurrencyForCountry = async (countryName) => {
+  const normalized = (countryName || '').toLowerCase().trim();
+  if (COUNTRY_CURRENCY_MAP[normalized]) {
+    return COUNTRY_CURRENCY_MAP[normalized];
+  }
+
   try {
     const url = `https://restcountries.com/v3.1/name/${encodeURIComponent(countryName)}?fullText=true&fields=currencies`;
-    const resp = await axios.get(url, { timeout: 8000 });
+    const resp = await axios.get(url, { timeout: 3500 });
     const data = Array.isArray(resp.data) ? resp.data[0] : null;
-    if (!data?.currencies) return null;
-    const firstKey = Object.keys(data.currencies)[0];
-    if (!firstKey) return null;
-    return {
-      code: firstKey,
-      name: data.currencies[firstKey]?.name || '',
-      symbol: data.currencies[firstKey]?.symbol || '',
+    if (data?.currencies) {
+      const firstKey = Object.keys(data.currencies)[0];
+      if (firstKey) {
+        return {
+          code: firstKey,
+          name: data.currencies[firstKey]?.name || '',
+          symbol: data.currencies[firstKey]?.symbol || '',
+        };
+      }
+    }
+  } catch (e) {}
+
+  return { code: 'USD', name: 'US Dollar', symbol: '$', exchangeRate: 0.012 };
+};
+
+// @desc Get live exchange rates endpoint for admin panel
+const getLiveRates = async (req, res, next) => {
+  try {
+    let rates = {
+      INR: 1,
+      USD: 0.012,
+      GBP: 0.0094,
+      EUR: 0.011,
+      AED: 0.044,
+      CAD: 0.016,
+      AUD: 0.018,
+      SGD: 0.016,
+      SAR: 0.045,
+      QAR: 0.044,
+      JPY: 1.8,
     };
-  } catch {
-    return null;
+
+    try {
+      const resp = await axios.get('https://open.er-api.com/v6/latest/INR', { timeout: 4000 });
+      if (resp.data && resp.data.rates) {
+        rates = { ...rates, ...resp.data.rates };
+      }
+    } catch (e) {}
+
+    res.status(200).json({
+      success: true,
+      data: rates,
+      rates: rates,
+    });
+  } catch (error) {
+    next(error);
   }
 };
 
@@ -179,4 +241,5 @@ module.exports = {
   createCountry,
   updateCountry,
   deleteCountry,
+  getLiveRates,
 };

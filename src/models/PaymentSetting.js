@@ -16,6 +16,10 @@ const paymentSettingSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    accountNumber: {
+      type: String,
+      default: '',
+    },
     mode: {
       type: String,
       enum: ['test', 'live'],

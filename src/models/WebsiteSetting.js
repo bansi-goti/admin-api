@@ -1,8 +1,20 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 
 const websiteSettingSchema = mongoose.Schema(
   {
     siteName: {
+      type: String,
+      default: '',
+    },
+    metaTitle: {
+      type: String,
+      default: '',
+    },
+    metaDescription: {
+      type: String,
+      default: '',
+    },
+    metaKeywords: {
       type: String,
       default: '',
     },
@@ -13,6 +25,38 @@ const websiteSettingSchema = mongoose.Schema(
     address: {
       type: String,
       default: '',
+    },
+    facebookUrl: {
+      type: String,
+      default: '',
+    },
+    instagramUrl: {
+      type: String,
+      default: '',
+    },
+    pinterestUrl: {
+      type: String,
+      default: '',
+    },
+    youtubeUrl: {
+      type: String,
+      default: '',
+    },
+    canonicalUrl: {
+      type: String,
+      default: '',
+    },
+    googleSiteVerification: {
+      type: String,
+      default: '',
+    },
+    googleAnalyticsId: {
+      type: String,
+      default: '',
+    },
+    robotsMeta: {
+      type: String,
+      default: 'index, follow',
     },
     logo: {
       type: String,

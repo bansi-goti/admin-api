@@ -5,8 +5,8 @@ const Notification = require('../models/Notification');
 // @access  Private
 const getNotifications = async (req, res, next) => {
   try {
-    const isAdmin = req.user.role === 'admin';
-    const query = isAdmin ? {} : { seller: req.user._id };
+    const isAdminOrSubadmin = req.user && (req.user.role === 'admin' || req.user.role === 'subadmin');
+    const query = isAdminOrSubadmin ? {} : { seller: req.user._id };
 
     // Filters
     const typeFilter = req.query.type;
@@ -45,7 +45,7 @@ const getNotifications = async (req, res, next) => {
       .limit(limit);
 
     // Calculate Stats across ALL notifications for this user (ignore filters for stats)
-    const allQuery = isAdmin ? {} : { seller: req.user._id };
+    const allQuery = isAdminOrSubadmin ? {} : { seller: req.user._id };
     const allNotifs = await Notification.find(allQuery);
     
     const stats = {
@@ -77,8 +77,8 @@ const getNotifications = async (req, res, next) => {
 // @access  Private
 const markAsRead = async (req, res, next) => {
   try {
-    const isAdmin = req.user.role === 'admin';
-    const query = isAdmin ? {} : { seller: req.user._id };
+    const isAdminOrSubadmin = req.user && (req.user.role === 'admin' || req.user.role === 'subadmin');
+    const query = isAdminOrSubadmin ? {} : { seller: req.user._id };
     
     if (req.body.id) {
       query._id = req.body.id;
@@ -96,8 +96,8 @@ const markAsRead = async (req, res, next) => {
 // @access  Private
 const deleteNotifications = async (req, res, next) => {
   try {
-    const isAdmin = req.user.role === 'admin';
-    const query = isAdmin ? {} : { seller: req.user._id };
+    const isAdminOrSubadmin = req.user && (req.user.role === 'admin' || req.user.role === 'subadmin');
+    const query = isAdminOrSubadmin ? {} : { seller: req.user._id };
     
     if (req.query.id) {
       query._id = req.query.id;

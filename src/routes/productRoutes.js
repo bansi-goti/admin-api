@@ -1,12 +1,14 @@
 const express = require('express');
 const {
   getAllProducts,
+  seedProducts,
   getProductById,
   createProduct,
   updateProduct,
   updateProductStatus,
   deleteProduct,
   bulkCreateProducts,
+  updateProductWishlistCount,
 } = require('../controllers/productController');
 const { protect, optionalProtect } = require('../middlewares/authMiddleware');
 const upload = require('../middlewares/uploadMiddleware');
@@ -57,6 +59,7 @@ const productUpload = upload.fields([
  *       401:
  *         description: Unauthorized
  */
+router.route('/seed').get(seedProducts);
 router.route('/').get(optionalProtect, getAllProducts);
 
 /**
@@ -192,3 +195,5 @@ router.route('/:id')
   .delete(protect, deleteProduct);
 
 module.exports = router;
+
+router.route('/:id/wishlist-count').post(updateProductWishlistCount);

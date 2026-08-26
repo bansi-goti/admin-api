@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const dns = require('dns');
 
-// Prefer IPv4 resolution order on Windows/local networks to avoid slow IPv6 lookups
 try {
   if (dns.setDefaultResultOrder) {
     dns.setDefaultResultOrder('ipv4first');
@@ -11,15 +10,20 @@ try {
 }
 
 const connectDB = async () => {
+  const mongoUri = process.env.MONGO_URI || 'mongodb://dhruvsavaliya83:4vBA3RcwS8S9ALUi@cluster0-shard-00-00.a5hzm.mongodb.net:27017,cluster0-shard-00-01.a5hzm.mongodb.net:27017,cluster0-shard-00-02.a5hzm.mongodb.net:27017/nayzora_admin?ssl=true&replicaSet=atlas-otbs38-shard-0&authSource=admin&retryWrites=true&w=majority';
+
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-
+    const conn = await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 30000,
+      family: 4,
+      tls: true,
+      tlsAllowInvalidCertificates: true
     });
-
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    console.log(`✅ MongoDB Connected (Atlas Cluster): ${conn.connection.host}`);
   } catch (error) {
-    console.error(`Error: ${error.message}`);
-    process.exit(1);
+    console.error(`❌ MongoDB Atlas Connection Error: ${error.message}`);
+    console.warn("Retrying MongoDB connection in 10 seconds...");
+    setTimeout(connectDB, 10000);
   }
 };
 

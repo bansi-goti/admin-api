@@ -18,12 +18,32 @@ const withdrawalSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Processing', 'Completed', 'Failed', 'Cancelled'],
+    enum: ['Pending', 'Processing', 'Completed', 'Approved', 'Rejected', 'Failed', 'Cancelled'],
     default: 'Processing'
   },
   remarks: {
     type: String,
     default: 'Pending transfer'
+  },
+  rzpPayoutId: {
+    type: String,
+    default: ''
+  },
+  rzpFundAccountId: {
+    type: String,
+    default: ''
+  },
+  rzpContactId: {
+    type: String,
+    default: ''
+  },
+  payoutMode: {
+    type: String,
+    default: 'IMPS'
+  },
+  utr: {
+    type: String,
+    default: ''
   }
 }, {
   timestamps: true

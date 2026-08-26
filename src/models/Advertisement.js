@@ -6,6 +6,10 @@ const advertisementSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+    },
     startDate: {
       type: String,
       required: true,

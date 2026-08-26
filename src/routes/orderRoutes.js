@@ -90,7 +90,7 @@ const router = express.Router();
  *       400:
  *         description: Invalid input
  */
-router.route('/').get(protect, getAllOrders).post(protect, createOrder);
+router.route('/').get(protect, getAllOrders).post(optionalProtect, createOrder);
 
 /**
  * @swagger

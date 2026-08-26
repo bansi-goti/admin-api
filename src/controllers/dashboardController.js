@@ -94,16 +94,16 @@ const getDashboardStats = async (req, res, next) => {
     const totalRevenuePrev = ordersPrevious.reduce((acc, order) => acc + order.totalAmount, 0);
 
     const totalProfitCurrent = ordersCurrent.reduce((acc, order) => {
-      const p = role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);
+      const p = role === 'admin' ? (order.profit || (order.totalAmount * 0.15)) : (order.sellerEarning || (order.totalAmount * 0.85));
       return acc + p;
     }, 0);
     const totalProfitPrev = ordersPrevious.reduce((acc, order) => {
-      const p = role === 'admin' ? (order.profit || 0) : (order.sellerEarning || 0);
+      const p = role === 'admin' ? (order.profit || (order.totalAmount * 0.15)) : (order.sellerEarning || (order.totalAmount * 0.85));
       return acc + p;
     }, 0);
 
-    const netAmountReceived = ordersCurrent.filter(o => o.status === 'Delivered').reduce((acc, o) => acc + (o.sellerEarning || 0), 0);
-    const pendingAmount = ordersCurrent.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').reduce((acc, o) => acc + (o.sellerEarning || 0), 0);
+    const netAmountReceived = ordersCurrent.filter(o => o.status === 'Delivered').reduce((acc, o) => acc + (o.sellerEarning || (o.totalAmount * 0.85)), 0);
+    const pendingAmount = ordersCurrent.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled').reduce((acc, o) => acc + (o.sellerEarning || (o.totalAmount * 0.85)), 0);
 
     // Items Sold
     const itemsSoldCurrent = ordersCurrent.reduce((acc, order) => {
@@ -114,8 +114,8 @@ const getDashboardStats = async (req, res, next) => {
     }, 0);
 
     // Unique Customers
-    const uniqueCustomersCurrent = new Set(ordersCurrent.map(order => order.customer.name)).size;
-    const uniqueCustomersPrev = new Set(ordersPrevious.map(order => order.customer.name)).size;
+    const uniqueCustomersCurrent = new Set(ordersCurrent.map(order => order.customer?.name || order.customer?.email || 'Guest')).size;
+    const uniqueCustomersPrev = new Set(ordersPrevious.map(order => order.customer?.name || order.customer?.email || 'Guest')).size;
 
     // Average Order Value
     const currentAOV = ordersCurrent.length > 0 ? totalRevenueCurrent / ordersCurrent.length : 0;
@@ -237,22 +237,29 @@ const getDashboardStats = async (req, res, next) => {
     }
 
     for (const [key, value] of Object.entries(revenueByInterval)) {
-      revenueTrendArray.push({ name: key, revenue: value, profit: profitByInterval[key] });
-      barChartArray.push({ name: key, date: key, revenue: value, profit: profitByInterval[key] });
+      revenueTrendArray.push({ name: key, value: value, revenue: value, profit: profitByInterval[key] });
+      barChartArray.push({ name: key, date: key, value: value, revenue: value, profit: profitByInterval[key] });
     }
     for (const [key, value] of Object.entries(ordersByInterval)) {
       ordersTrendArray.push({ name: key, value });
     }
 
     // Top Products
-    const topProducts = topProductsData.map(p => ({
-      id: p._id,
-      name: p.name,
-      code: p.code,
-      orders: p.sales || 0,
-      price: `₹${(p.price || 0).toLocaleString('en-IN')}`,
-      img: p.mainImage || 'https://via.placeholder.com/100'
-    }));
+    const hostUrl = `${req.protocol}://${req.get('host')}`;
+    const topProducts = topProductsData.map(p => {
+      const imgPath = p.mainImage || (Array.isArray(p.gallery) && p.gallery.length > 0 ? p.gallery[0] : '');
+      const fullImg = imgPath ? (imgPath.startsWith('http') ? imgPath : `${hostUrl}${imgPath}`) : '';
+      return {
+        id: p._id,
+        name: p.name,
+        code: p.sku || p.productId || `NZR-${String(p._id).slice(-4).toUpperCase()}`,
+        sales: typeof p.sales === 'number' ? p.sales : 0,
+        orders: typeof p.sales === 'number' ? p.sales : 0,
+        price: `₹${(p.price || 0).toLocaleString('en-IN')}`,
+        img: fullImg,
+        image: fullImg
+      };
+    });
 
     // Formatting Recent Orders
     const recentOrders = recentOrdersData.map(order => {
@@ -263,14 +270,16 @@ const getDashboardStats = async (req, res, next) => {
 
       if (firstItem && firstItem.product) {
         productStr = firstItem.product.name;
-        img = firstItem.product.mainImage || img;
+        const mainImg = firstItem.product.mainImage;
+        img = mainImg ? (mainImg.startsWith('http') ? mainImg : `${hostUrl}${mainImg}`) : img;
         qty = firstItem.quantity;
       }
 
       return {
+        _id: order._id.toString(),
         id: order.orderId,
-        customer: order.customer.name,
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(order.customer.name)}&background=random`,
+        customer: order.customer?.name || 'Guest Customer',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(order.customer?.name || 'Guest')}&background=random`,
         product: productStr,
         img: img,
         qty: qty,
@@ -281,10 +290,34 @@ const getDashboardStats = async (req, res, next) => {
       };
     });
 
+    // Calculate total net earnings across all seller orders (non-cancelled)
+    let totalAllEarnings = 0;
+    if (role !== 'admin') {
+      const allSellerOrders = await Order.find({ seller: userId });
+      allSellerOrders.forEach(o => {
+        if (!['Refunded', 'Cancelled', 'Returned'].includes(o.status)) {
+          totalAllEarnings += (o.sellerEarning || (o.totalAmount * 0.85));
+        }
+      });
+    } else {
+      totalAllEarnings = totalRevenueCurrent;
+    }
+
+    const Withdrawal = require('../models/Withdrawal');
+    const sellerWithdrawals = await Withdrawal.find(role === 'admin' ? {} : { seller: userId });
+    let totalWithdrawn = 0;
+    sellerWithdrawals.forEach(w => {
+      if (w.status === 'Completed' || w.status === 'Approved') totalWithdrawn += (w.amount || 0);
+    });
+
+    const currentBalance = Math.max(0, Math.round((totalAllEarnings - totalWithdrawn) * 100) / 100);
+
     res.json({
       code: 200,
       stats: {
-        totalRevenue: totalRevenueCurrent,
+        totalRevenue: role !== 'admin' ? availableForWithdrawal : totalRevenueCurrent,
+        currentBalance: currentBalance,
+        totalEarnings: totalAllEarnings,
         totalProfit: totalProfitCurrent,
         totalOrders: totalOrdersCurrent,
         totalProducts: totalProductsOverall,

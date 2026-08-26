@@ -25,7 +25,7 @@ const importData = async () => {
     await Category.deleteMany();
     await Size.deleteMany();
     await Color.deleteMany();
-    
+
     let admin = await User.findOne({ email: 'admin@nayzora.com' });
     if (!admin) {
       console.log('Creating admin user...');
@@ -53,7 +53,7 @@ const importData = async () => {
     ];
 
     const createdCategories = await Category.insertMany(categoriesData);
-    
+
     console.log('Seeding Sizes and Colors...');
     const sizesData = [];
     const colorsData = [];

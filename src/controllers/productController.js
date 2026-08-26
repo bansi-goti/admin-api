@@ -2,6 +2,47 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const mongoose = require('mongoose');
 
+const Advertisement = require('../models/Advertisement');
+
+const applyActiveCampaignDiscounts = async (productsList) => {
+  try {
+    const activeAds = await Advertisement.find({
+      status: { $in: ['Active', 'Approved', 'Scheduled', 'Draft'] },
+      product: { $ne: null }
+    }).lean();
+
+    if (!activeAds || activeAds.length === 0) return productsList;
+
+    const adMap = {};
+    activeAds.forEach(ad => {
+      if (ad.product) {
+        const pId = ad.product.toString();
+        adMap[pId] = ad;
+      }
+    });
+
+    return productsList.map(p => {
+      const pId = p._id ? p._id.toString() : String(p.id || '');
+      const activeAd = adMap[pId];
+      if (activeAd && activeAd.discountedPrice && activeAd.discountedPrice > 0) {
+        p.originalCatalogPrice = p.price;
+        p.originalPrice = activeAd.originalPrice || p.price;
+        p.discountedPrice = activeAd.discountedPrice;
+        p.price = activeAd.discountedPrice;
+        p.discountPercentage = activeAd.discountPercentage || Math.round(((p.originalCatalogPrice - activeAd.discountedPrice) / p.originalCatalogPrice) * 100);
+        p.campaignActive = true;
+      }
+      return p;
+    });
+  } catch (err) {
+    console.error('Failed to apply active campaign discounts:', err);
+    return productsList;
+  }
+};
+
+
+
+
 const getAllProducts = async (req, res, next) => {
   try {
     if (mongoose.connection.readyState !== 1) {
@@ -55,9 +96,23 @@ const getAllProducts = async (req, res, next) => {
       }
     }
 
-    // RBAC: If user is authenticated as seller, they only see their own products
-    if (req.user && (req.user.uiRole === 'seller' || req.user.role === 'seller')) {
+    // RBAC & Status Filtering logic:
+    const isSeller = req.user && (req.user.role === 'seller' || req.user.uiRole === 'seller' || req.user.role === 'subadmin');
+    const isAdmin = req.user && req.user.role === 'admin';
+    const isCustomer = req.user && req.user.role === 'user' && !isSeller;
+
+    if (isAdmin || isCustomer) {
+      if (statusParam && statusParam !== 'All Status') {
+        query.status = { $regex: '^' + statusParam + '$', $options: 'i' };
+      }
+      if (req.query.seller) query.seller = req.query.seller;
+    } else if (isSeller) {
       query.seller = req.user._id;
+      if (statusParam && statusParam !== 'All Status') {
+        query.status = { $regex: '^' + statusParam + '$', $options: 'i' };
+      }
+    } else {
+      if (req.query.seller) query.seller = req.query.seller;
     }
 
     const startIndex = (page - 1) * limit;
@@ -96,7 +151,21 @@ const getAllProducts = async (req, res, next) => {
         totalData: total,
         totalPages: Math.ceil(total / limit),
         currentPage: page,
-        data: productsWithReviews,
+        data: await applyActiveCampaignDiscounts(await (async () => {
+          const Wishlist = require('../models/Wishlist');
+          const allWishlists = await Wishlist.find({});
+          const wishlistCountsMap = {};
+          allWishlists.forEach(w => {
+            if (w.product) {
+              const pIdStr = w.product.toString();
+              wishlistCountsMap[pIdStr] = (wishlistCountsMap[pIdStr] || 0) + 1;
+            }
+          });
+          return productsWithReviews.map(prod => {
+            prod.wishlistCount = Math.max(prod.wishlistCount || 0, wishlistCountsMap[prod._id.toString()] || 0);
+            return prod;
+          });
+        })()),
       },
     });
   } catch (error) {
@@ -107,6 +176,7 @@ const getAllProducts = async (req, res, next) => {
 // @desc    Get single product
 // @route   GET /api/products/:id
 // @access  Private
+
 const getProductById = async (req, res, next) => {
   try {
     const mongoose = require('mongoose');
@@ -122,7 +192,7 @@ const getProductById = async (req, res, next) => {
     if (!product) {
       product = await Product.findOne({
         $or: [
-          { productId: req.params.id },
+          { slug: req.params.id }, { productId: req.params.id },
           { sku: req.params.id }
         ]
       })
@@ -134,9 +204,19 @@ const getProductById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    // RBAC: Verify ownership if not admin
-    if (req.user && req.user.role !== 'admin' && product.seller && product.seller._id && product.seller._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'Not authorized to access this product' });
+    // RBAC & Status Check:
+    // Admin can access any product regardless of status.
+    // Seller can access their own products regardless of status.
+    // Public/Customer can ONLY access products with status 'Approved'.
+    const isAdminUser = req.user && req.user.role === 'admin';
+    const isSellerOwner = req.user && (
+      (product.seller && product.seller._id && product.seller._id.toString() === req.user._id.toString()) ||
+      (product.seller && product.seller.toString() === req.user._id.toString())
+    );
+
+    const isApprovedStatus = product.status && product.status.toLowerCase() === 'approved';
+    if (!isAdminUser && !isSellerOwner && !isApprovedStatus) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
     const productObj = product.toObject();
@@ -157,6 +237,10 @@ const getProductById = async (req, res, next) => {
     productObj.ratingScore = avgRating > 0 ? avgRating.toFixed(1) : '0.0';
     productObj.reviewCount = numReviews;
 
+    const Wishlist = require('../models/Wishlist');
+    const realWishlistCount = await Wishlist.countDocuments({ product: product._id });
+    productObj.wishlistCount = Math.max(product.wishlistCount || 0, realWishlistCount);
+
     res.status(200).json({
       success: true,
       data: productObj,
@@ -169,6 +253,7 @@ const getProductById = async (req, res, next) => {
 // @desc    Create new product
 // @route   POST /api/products
 // @access  Private
+
 const createProduct = async (req, res, next) => {
   try {
     const {
@@ -262,7 +347,7 @@ const createProduct = async (req, res, next) => {
       sku,
       price: actualPrice,
       stock: actualStock,
-      status: status || 'Pending',
+      status: (req.user && (req.user.role === 'admin' || req.user.uiRole === 'admin') && status) ? status : 'Pending',
       mainImage: mainImagePath,
       gallery: galleryPaths,
       tags: parsedTags,
@@ -315,6 +400,7 @@ const createProduct = async (req, res, next) => {
 // @desc    Update product status
 // @route   PATCH /api/products/:id/status
 // @access  Private (Admin only ideally, but using protect)
+
 const updateProductStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
@@ -353,6 +439,7 @@ const updateProductStatus = async (req, res, next) => {
 // @desc    Delete product
 // @route   DELETE /api/products/:id
 // @access  Private
+
 const deleteProduct = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -521,6 +608,7 @@ const updateProduct = async (req, res, next) => {
 // @desc    Bulk create products
 // @route   POST /api/products/bulk
 // @access  Private
+
 const bulkCreateProducts = async (req, res, next) => {
   try {
     const { products } = req.body;
@@ -638,8 +726,249 @@ const bulkCreateProducts = async (req, res, next) => {
   }
 };
 
+
+// @desc    Seed sample products into MongoDB
+// @route   GET /api/products/seed
+// @access  Public
+
+const seedProducts = async (req, res, next) => {
+  try {
+    const User = require('../models/User');
+    const Category = require('../models/Category');
+
+    let adminUser = await User.findOne({ role: 'admin' });
+    const sellerId = adminUser ? adminUser._id : new mongoose.Types.ObjectId();
+
+    let categories = await Category.find({});
+    let catId = categories.length > 0 ? categories[0]._id : new mongoose.Types.ObjectId();
+
+    await Product.deleteMany({});
+
+    const sampleProducts = [
+      {
+        seller: sellerId,
+        category: catId,
+        name: 'Royal Emerald Diamond Necklace',
+        sku: 'ROYAL-EMERALD-01',
+        price: 45999,
+        costPrice: 55999,
+        discountPercentage: 18,
+        stock: 25,
+        sales: 0,
+        rating: 4.9,
+        reviewCount: 128,
+        status: 'Approved',
+        isFeatured: true,
+        isTrending: true,
+        tags: ['Necklace', 'Emerald', 'Gold', 'Diamond'],
+        mainImage: '/hero_necklace_emerald.png',
+        gallery: ['/hero_necklace_emerald.png'],
+        description: 'Handcrafted luxury 24K gold emerald necklace set with brilliant cut diamonds.'
+      },
+      {
+        seller: sellerId,
+        category: catId,
+        name: 'Solitaire Diamond Engagement Ring',
+        sku: 'SOLITAIRE-RING-02',
+        price: 28500,
+        costPrice: 34000,
+        discountPercentage: 16,
+        stock: 30,
+        sales: 0,
+        rating: 4.8,
+        reviewCount: 94,
+        status: 'Approved',
+        isFeatured: true,
+        isTrending: true,
+        tags: ['Ring', 'Diamond', 'Solitaire', 'Wedding'],
+        mainImage: '/arrival_1.png',
+        gallery: ['/arrival_1.png'],
+        description: 'Timeless solitaire diamond ring crafted in 18K white gold.'
+      },
+      {
+        seller: sellerId,
+        category: catId,
+        name: 'Heritage Gold Bangle Collection',
+        sku: 'HERITAGE-BANGLE-03',
+        price: 62000,
+        costPrice: 72000,
+        discountPercentage: 14,
+        stock: 15,
+        sales: 0,
+        rating: 4.9,
+        reviewCount: 156,
+        status: 'Approved',
+        isFeatured: true,
+        isTrending: true,
+        tags: ['Bangle', 'Gold', 'Heritage', 'Traditional'],
+        mainImage: '/arrival_2.png',
+        gallery: ['/arrival_2.png'],
+        description: 'Traditional handcrafted gold bangles with detailed filigree work.'
+      },
+      {
+        seller: sellerId,
+        category: catId,
+        name: 'Imperial Ruby Drop Earrings',
+        sku: 'RUBY-EARRINGS-04',
+        price: 18999,
+        costPrice: 22999,
+        discountPercentage: 17,
+        stock: 20,
+        sales: 0,
+        rating: 4.7,
+        reviewCount: 82,
+        status: 'Approved',
+        isFeatured: true,
+        isTrending: true,
+        tags: ['Earrings', 'Ruby', 'Gold', 'Party'],
+        mainImage: '/trending_1.png',
+        gallery: ['/trending_1.png'],
+        description: 'Stunning ruby drop earrings with diamond halo design.'
+      },
+      {
+        seller: sellerId,
+        category: catId,
+        name: 'Vintage Gold Pendant Set',
+        sku: 'GOLD-PENDANT-05',
+        price: 34500,
+        costPrice: 40000,
+        discountPercentage: 13,
+        stock: 18,
+        sales: 0,
+        rating: 4.8,
+        reviewCount: 64,
+        status: 'Approved',
+        isFeatured: true,
+        isTrending: true,
+        tags: ['Pendant', 'Gold', 'Vintage'],
+        mainImage: '/arrival_3.png',
+        gallery: ['/arrival_3.png'],
+        description: 'Vintage gold pendant set featuring intricate craftsmanship.'
+      },
+      {
+        seller: sellerId,
+        category: catId,
+        name: 'Classic Solitaire Platinum Band',
+        sku: 'PLAT-BAND-06',
+        price: 52000,
+        costPrice: 60000,
+        discountPercentage: 13,
+        stock: 12,
+        sales: 0,
+        rating: 4.9,
+        reviewCount: 45,
+        status: 'Approved',
+        isFeatured: true,
+        isTrending: true,
+        tags: ['Ring', 'Platinum', 'Band'],
+        mainImage: '/arrival_4.png',
+        gallery: ['/arrival_4.png'],
+        description: 'Elegant 950 platinum band with micro-pave diamonds.'
+      },
+      {
+        seller: sellerId,
+        category: catId,
+        name: 'Luxury Diamond Choker Necklace',
+        sku: 'CHOKER-DMD-07',
+        price: 89000,
+        costPrice: 99000,
+        discountPercentage: 10,
+        stock: 8,
+        sales: 0,
+        rating: 5.0,
+        reviewCount: 38,
+        status: 'Approved',
+        isFeatured: true,
+        isTrending: true,
+        tags: ['Necklace', 'Choker', 'Diamond'],
+        mainImage: '/trending_2.png',
+        gallery: ['/trending_2.png'],
+        description: 'Opulent diamond choker necklace for special royal occasions.'
+      },
+      {
+        seller: sellerId,
+        category: catId,
+        name: 'Handcrafted Kundan Earrings',
+        sku: 'KUNDAN-EAR-08',
+        price: 15500,
+        costPrice: 18500,
+        discountPercentage: 16,
+        stock: 22,
+        sales: 0,
+        rating: 4.8,
+        reviewCount: 52,
+        status: 'Approved',
+        isFeatured: true,
+        isTrending: true,
+        tags: ['Earrings', 'Kundan', 'Traditional'],
+        mainImage: '/trending_3.png',
+        gallery: ['/trending_3.png'],
+        description: 'Traditional Indian Kundan earrings with pearl drops.'
+      }
+    ];
+
+    const created = await Product.insertMany(sampleProducts);
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully seeded ${created.length} products into MongoDB!`,
+      count: created.length
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
+// @desc    Increment or decrement public wishlist count for a product
+// @route   POST /api/products/:id/wishlist-count
+// @access  Public
+const updateProductWishlistCount = async (req, res, next) => {
+  try {
+    const { action } = req.body; // 'add' or 'remove'
+    const productId = req.params.id;
+
+    let targetProduct = null;
+    if (mongoose.Types.ObjectId.isValid(productId)) {
+      targetProduct = await Product.findById(productId);
+    }
+    if (!targetProduct) {
+      targetProduct = await Product.findOne({
+        $or: [
+          { slug: productId },
+          { productId: productId },
+          { sku: productId },
+          { name: productId }
+        ]
+      });
+    }
+
+    if (!targetProduct) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const currentCount = targetProduct.wishlistCount || 0;
+    const delta = action === 'add' ? 1 : -1;
+    const newCount = Math.max(0, currentCount + delta);
+
+    targetProduct.wishlistCount = newCount;
+    await targetProduct.save();
+
+    res.status(200).json({
+      success: true,
+      wishlistCount: newCount,
+      message: 'Wishlist count updated',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
+  updateProductWishlistCount,
   getAllProducts,
+  seedProducts,
   getProductById,
   createProduct,
   updateProduct,

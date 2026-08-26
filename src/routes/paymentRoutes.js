@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   getPaymentSettings,
+  getPublicPaymentSettings,
   savePaymentSetting,
   updatePaymentStatus,
 } = require('../controllers/paymentController');
@@ -40,6 +41,7 @@ const router = express.Router();
  *       200:
  *         description: Saved
  */
+router.route('/public').get(getPublicPaymentSettings);
 router.route('/').get(protect, getPaymentSettings);
 router.route('/').post(protect, savePaymentSetting);
 

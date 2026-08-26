@@ -5,6 +5,7 @@ const {
   createCountry,
   updateCountry,
   deleteCountry,
+  getLiveRates,
 } = require('../controllers/countryController');
 const { protect } = require('../middlewares/authMiddleware');
 
@@ -12,6 +13,9 @@ const router = express.Router();
 
 // PUBLIC COUNTRY & CURRENCY ROUTE
 router.get('/public', getAllCountries);
+router.get('/live-rates', getLiveRates);
+router.get('/rates', getLiveRates);
+router.get('/live', getLiveRates);
 
 /**
  * @swagger

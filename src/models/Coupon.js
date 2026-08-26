@@ -43,23 +43,38 @@ const couponSchema = new mongoose.Schema({
   },
   validFrom: {
     type: Date,
-    required: true,
+    default: Date.now,
   },
   validTo: {
     type: Date,
-    required: true,
+    default: null,
   },
+  isInfinite: {
+    type: Boolean,
+    default: false,
+  },
+  appliesTo: {
+    type: String,
+    enum: ['All Products', 'Specific Category', 'Specific Product'],
+    default: 'All Products',
+  },
+  categories: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+  }],
+  products: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product',
+  }],
   seller: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
   },
-  // We can dynamically compute 'status' (Active, Scheduled, Expired)
 }, {
   timestamps: true,
 });
 
-// Compound index to ensure a subadmin cannot have duplicate coupon codes, but different subadmins can have the same code.
 couponSchema.index({ code: 1, seller: 1 }, { unique: true });
 
 module.exports = mongoose.model('Coupon', couponSchema);

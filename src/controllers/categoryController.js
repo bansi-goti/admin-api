@@ -30,7 +30,7 @@ const getAllCategories = async (req, res) => {
       .lean();
 
     const enhancedCategories = await Promise.all(categories.map(async (cat) => {
-      const count = await Product.countDocuments({ category: cat._id });
+      const count = await Product.countDocuments({ category: cat._id, status: { $regex: '^Approved$', $options: 'i' } });
       return {
         ...cat,
         productsCount: count
@@ -66,7 +66,7 @@ const getCategoryById = async (req, res) => {
       return res.status(404).json({ message: 'Category not found' });
     }
 
-    const count = await Product.countDocuments({ category: category._id });
+    const count = await Product.countDocuments({ category: category._id, status: { $regex: '^Approved$', $options: 'i' } });
     const categoryObj = category.toObject ? category.toObject() : category;
     categoryObj.productsCount = count;
 

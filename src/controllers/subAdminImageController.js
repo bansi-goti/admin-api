@@ -43,7 +43,8 @@ const getImages = async (req, res, next) => {
     // Only get images uploaded by the requesting user
     // Or if we want sub admins to see all subadmin images, we can remove the filter.
     // The requirement says "yeh option sub admin ko hi ayega"
-    const images = await SubAdminImage.find({ uploadedBy: req.user._id }).sort({ createdAt: -1 });
+    const query = req.user.role === 'admin' ? {} : { uploadedBy: req.user._id };
+    const images = await SubAdminImage.find(query).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,

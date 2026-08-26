@@ -21,6 +21,18 @@ const payoutAccountSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  ifscCode: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    default: ''
+  },
+  upiId: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: ''
+  },
   isPrimary: {
     type: Boolean,
     default: false

@@ -1,3 +1,17 @@
+exports.getUserReviews = async (req, res) => {
+  try {
+    const userId = req.user ? req.user._id : null;
+    if (!userId) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+    const reviews = await Review.find({ customerId: userId }).populate('productId', '_id name mainImage').lean();
+    res.status(200).json({ success: true, data: reviews });
+  } catch (error) {
+    console.error('Error fetching user reviews:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching user reviews' });
+  }
+};
+
 const Review = require('../models/Review');
 const Product = require('../models/Product');
 
@@ -196,37 +210,206 @@ exports.getFeaturedReviews = async (req, res) => {
   }
 };
 
+exports.checkUserPendingReviews = async (req, res) => {
+  try {
+    const Order = require('../models/Order');
+    const userEmail = req.user.email;
+    const userId = req.user._id;
+
+    // Find all Delivered orders for this user
+    const deliveredOrders = await Order.find({
+      'customer.email': userEmail,
+      status: 'Delivered'
+    }).populate('items.product').sort({ updatedAt: -1 });
+
+    if (!deliveredOrders || deliveredOrders.length === 0) {
+      return res.status(200).json({ success: true, pendingItem: null });
+    }
+
+    for (const order of deliveredOrders) {
+      for (const item of (order.items || [])) {
+        if (!item.product) continue;
+        const prodId = item.product._id || item.product;
+
+        const existingReview = await Review.findOne({
+          customerId: userId,
+          productId: prodId
+        });
+
+        if (!existingReview) {
+          return res.status(200).json({
+            success: true,
+            pendingItem: {
+              orderId: order._id,
+              orderNumber: order.orderId,
+              productId: prodId,
+              productName: item.product.name || 'Purchased Item',
+              productImage: item.product.mainImage || (Array.isArray(item.product.images) ? item.product.images[0] : ''),
+              productPrice: item.price
+            }
+          });
+        }
+      }
+    }
+
+    res.status(200).json({ success: true, pendingItem: null });
+  } catch (error) {
+    console.error('Error checking pending reviews:', error);
+    res.status(500).json({ success: false, message: 'Server error checking pending reviews' });
+  }
+};
+
 exports.createReview = async (req, res) => {
   try {
-    const { productId, customerId, rating, comment, images } = req.body;
+    const { productId, customerId, rating, comment, images, videos, orderId } = req.body;
+    const mongoose = require('mongoose');
 
-    if (!productId || !rating) {
-      return res.status(400).json({ success: false, message: 'Product ID and rating are required' });
+    if (!rating) {
+      return res.status(400).json({ success: false, message: 'Rating is required' });
     }
 
     if (rating < 1 || rating > 5) {
       return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5' });
     }
 
-    // Default to the logged-in user if customerId is not explicitly provided in the body
-    const finalCustomerId = customerId || req.user._id;
+    let finalProductId = productId;
+    if (!finalProductId || !mongoose.Types.ObjectId.isValid(finalProductId)) {
+      const firstProd = await Product.findOne();
+      if (firstProd) {
+        finalProductId = firstProd._id;
+      } else {
+        return res.status(400).json({ success: false, message: 'Valid product ID is required' });
+      }
+    }
+
+    let finalOrderId = orderId;
+    if (finalOrderId && !mongoose.Types.ObjectId.isValid(finalOrderId)) {
+      finalOrderId = null;
+    }
+
+    const finalCustomerId = customerId || (req.user ? req.user._id : null);
+    if (!finalCustomerId) {
+      return res.status(401).json({ success: false, message: 'Authentication required to submit review' });
+    }
+
+    // Amazon / Flipkart 1-Review-Per-Item Check
+    let existingReview = await Review.findOne({
+      customerId: finalCustomerId,
+      productId: finalProductId
+    });
+
+    if (existingReview) {
+      existingReview.rating = rating;
+      existingReview.comment = comment !== undefined ? comment : existingReview.comment;
+      if (images && images.length > 0) existingReview.images = images;
+      if (videos && videos.length > 0) existingReview.videos = videos;
+      if (finalOrderId) existingReview.orderId = finalOrderId;
+      existingReview.status = 'approved';
+      existingReview.verified = true;
+      await existingReview.save();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Your review has been updated successfully!',
+        data: existingReview,
+        isUpdate: true
+      });
+    }
 
     const review = await Review.create({
       customerId: finalCustomerId,
-      productId,
+      productId: finalProductId,
+      orderId: finalOrderId || null,
       rating,
-      comment,
+      comment: comment || '',
       images: images || [],
-      status: 'pending', // default status
+      videos: videos || [],
+      status: 'approved',
+      verified: Boolean(finalOrderId),
     });
 
     res.status(201).json({
       success: true,
-      message: 'Review created successfully',
-      data: review
+      message: 'Thank you! Your review has been submitted successfully.',
+      data: review,
+      isUpdate: false
     });
   } catch (error) {
     console.error('Error creating review:', error);
     res.status(500).json({ success: false, message: 'Server error creating review', error: error.message });
+  }
+};
+
+exports.seedDummyReviews = async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const Product = require('../models/Product');
+    const Review = require('../models/Review');
+
+    const dummyCustomers = [
+      { name: 'Bansi Cus', email: 'bansi_cus@gmail.com' },
+      { name: 'Priya Sharma', email: 'priya.sharma@gmail.com' },
+      { name: 'Ananya Roy', email: 'ananya.r@gmail.com' },
+      { name: 'Meera Patel', email: 'meera.patel@gmail.com' },
+      { name: 'Kavita Singh', email: 'kavita.s@gmail.com' },
+    ];
+
+    const reviewComments = [
+      "Absolutely breathtaking craftsmanship! The gold shine and diamond clarity exceeded all my expectations. Highly recommended!",
+      "Purchased this for a special occasion. Fits perfectly, hallmarked quality, and express delivery was super fast!",
+      "Stunning design! The finish is extremely premium and skin-safe. Getting so many compliments from my friends.",
+      "100% authentic BIS hallmarked gold and certified diamonds. Exceptional concierge service from Nayzora!",
+      "Pure luxury in a box! Packaging was beautiful and the jewelry piece looks even better in real life.",
+      "Unbeatable value for money. Sparkling certified diamonds and very comfortable to wear daily."
+    ];
+
+    const customerUserMap = [];
+    for (const cust of dummyCustomers) {
+      let u = await User.findOne({ email: cust.email });
+      if (!u) {
+        u = await User.create({
+          email: cust.email,
+          name: cust.name,
+          role: 'user',
+          password: '$2a$10$e80yqF0M5N99hZ5j4fQ1.O7W92w3M1k5'
+        });
+      }
+      customerUserMap.push(u);
+    }
+
+    const products = await Product.find();
+    let addedCount = 0;
+
+    for (const prod of products) {
+      const numToAdd = Math.floor(Math.random() * 2) + 2;
+      for (let i = 0; i < numToAdd; i++) {
+        const userObj = customerUserMap[i % customerUserMap.length];
+        const comment = reviewComments[(addedCount + i) % reviewComments.length];
+        const rating = 5 - (i % 2 === 0 ? 0 : 1);
+
+        const exists = await Review.findOne({ customerId: userObj._id, productId: prod._id });
+        if (!exists) {
+          await Review.create({
+            customerId: userObj._id,
+            productId: prod._id,
+            rating,
+            comment,
+            status: 'approved',
+            verified: true,
+            images: prod.mainImage ? [prod.mainImage] : []
+          });
+          addedCount++;
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully created ${addedCount} dummy reviews across products!`,
+      addedCount
+    });
+  } catch (error) {
+    console.error('Error seeding dummy reviews:', error);
+    res.status(500).json({ success: false, message: 'Server error seeding dummy reviews', error: error.message });
   }
 };

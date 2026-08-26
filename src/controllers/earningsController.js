@@ -8,16 +8,13 @@ const getEarnings = async (req, res, next) => {
     const { startDate, endDate } = req.query;
     
     // Default to current month if dates not provided
-    const start = startDate ? new Date(startDate) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const end = endDate ? new Date(endDate) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59, 999);
-    
-    if (start && end) {
+const query = {};
+    if (startDate || endDate) {
+      const start = startDate ? new Date(startDate) : new Date(0);
+      const end = endDate ? new Date(endDate) : new Date();
       end.setHours(23, 59, 59, 999);
+      query.createdAt = { $gte: start, $lte: end };
     }
-
-    const query = {
-      createdAt: { $gte: start, $lte: end }
-    };
 
     // If subadmin (seller), only fetch their orders
     if (req.user && req.user.role !== 'admin') {
@@ -81,11 +78,25 @@ const getEarnings = async (req, res, next) => {
       value: dailyDataMap[key].net
     }));
 
+    const Withdrawal = require('../models/Withdrawal');
+    const sellerId = (req.user && req.user._id) ? req.user._id : null;
+    let totalWithdrawn = 0;
+    if (sellerId) {
+      const allWithdrawals = await Withdrawal.find(req.user.role === 'admin' ? {} : { seller: sellerId });
+      allWithdrawals.forEach(w => {
+        if (w.status === 'Completed' || w.status === 'Approved') totalWithdrawn += (w.amount || 0);
+      });
+    }
+
+    const currentBalance = Math.max(0, Math.round((totalEarnings - totalWithdrawn) * 100) / 100);
+
     res.status(200).json({
       success: true,
       data: {
         cards: {
-          totalEarnings,
+          totalEarnings: currentBalance,
+          rawTotalEarnings: totalEarnings,
+          currentBalance,
           netEarnings: totalEarnings, // Adjust as needed based on tax/deductions
           totalOrders: totalOrdersCount,
           averageOrderValue,

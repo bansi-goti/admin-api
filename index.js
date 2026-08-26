@@ -68,11 +68,15 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/earnings', earningsRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
+app.use('/api/upload', uploadRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/sub-admin-image', subAdminImageRoutes);
+app.use('/api/subadmin-image', subAdminImageRoutes);
+app.use('/api/sub-admin-images', subAdminImageRoutes);
+app.use('/api/subadmin-images', subAdminImageRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/addresses', addressRoutes);
@@ -80,6 +84,7 @@ app.use('/api/locations', locationRoutes);
 
 // Static Uploads Folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(path.join(__dirname, 'uploads')));
 
 // Swagger Documentation setup
 swaggerDocs(app, process.env.PORT || 5000);

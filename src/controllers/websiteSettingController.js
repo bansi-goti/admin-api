@@ -1,4 +1,4 @@
-const WebsiteSetting = require('../models/WebsiteSetting');
+﻿const WebsiteSetting = require('../models/WebsiteSetting');
 const GoogleAuthSetting = require('../models/GoogleAuthSetting');
 const fs = require('fs');
 const path = require('path');
@@ -13,6 +13,9 @@ const getWebsiteSettings = async (req, res, next) => {
     if (!settings) {
       settings = await WebsiteSetting.create({
         siteName: 'Nayzora Jewellery',
+        metaTitle: 'Nayzora Jewellery - Timeless Elegance',
+        metaDescription: 'Discover luxury handcrafted gold and diamond jewellery collections at Nayzora.',
+        metaKeywords: 'jewellery, gold, diamonds, rings, necklaces, luxury',
         supportEmail: 'support@nayzora.com',
         address: 'Mumbai, India',
         logo: '',
@@ -28,6 +31,9 @@ const getWebsiteSettings = async (req, res, next) => {
       success: true,
       data: {
         siteName: 'Nayzora Jewellery',
+        metaTitle: 'Nayzora Jewellery - Timeless Elegance',
+        metaDescription: 'Discover luxury handcrafted gold and diamond jewellery collections at Nayzora.',
+        metaKeywords: 'jewellery, gold, diamonds, rings, necklaces, luxury',
         supportEmail: 'support@nayzora.com',
         address: 'Mumbai, India',
         logo: '',
@@ -41,21 +47,35 @@ const getWebsiteSettings = async (req, res, next) => {
 // @access  Private
 const updateWebsiteSettings = async (req, res, next) => {
   try {
-    const { siteName, supportEmail, address, googleClientId, googleClientSecret, isGoogleLoginEnabled } = req.body;
+    const { siteName, metaTitle, metaDescription, metaKeywords, supportEmail, address, googleClientId, googleClientSecret, isGoogleLoginEnabled, facebookUrl, instagramUrl, pinterestUrl, youtubeUrl, canonicalUrl, googleSiteVerification, googleAnalyticsId, robotsMeta } = req.body;
     
     let settings = await WebsiteSetting.findOne();
     
     const updateData = {
-      siteName: siteName || '',
-      supportEmail: supportEmail || '',
-      address: address || '',
+      siteName: siteName !== undefined ? siteName : '',
+      supportEmail: supportEmail !== undefined ? supportEmail : '',
+      address: address !== undefined ? address : '',
     };
+
+    if (metaTitle !== undefined) updateData.metaTitle = metaTitle;
+    if (metaDescription !== undefined) updateData.metaDescription = metaDescription;
+    if (metaKeywords !== undefined) updateData.metaKeywords = metaKeywords;
+
+    if (facebookUrl !== undefined) updateData.facebookUrl = facebookUrl;
+    if (instagramUrl !== undefined) updateData.instagramUrl = instagramUrl;
+    if (pinterestUrl !== undefined) updateData.pinterestUrl = pinterestUrl;
+    if (youtubeUrl !== undefined) updateData.youtubeUrl = youtubeUrl;
+
+    if (canonicalUrl !== undefined) updateData.canonicalUrl = canonicalUrl;
+    if (googleSiteVerification !== undefined) updateData.googleSiteVerification = googleSiteVerification;
+    if (googleAnalyticsId !== undefined) updateData.googleAnalyticsId = googleAnalyticsId;
+    if (robotsMeta !== undefined) updateData.robotsMeta = robotsMeta;
 
     if (googleClientId !== undefined) updateData.googleClientId = typeof googleClientId === 'string' ? googleClientId.trim() : googleClientId;
     if (googleClientSecret !== undefined) updateData.googleClientSecret = typeof googleClientSecret === 'string' ? googleClientSecret.trim() : googleClientSecret;
     if (isGoogleLoginEnabled !== undefined) updateData.isGoogleLoginEnabled = Boolean(isGoogleLoginEnabled);
 
-    // Sync to GoogleAuthSetting model as well
+    // Sync to GoogleAuthSetting model
     try {
       if (googleClientId !== undefined || isGoogleLoginEnabled !== undefined) {
         let gSettings = await GoogleAuthSetting.findOne();
@@ -78,7 +98,6 @@ const updateWebsiteSettings = async (req, res, next) => {
     if (req.file) {
       updateData.logo = req.file.filename;
 
-      // Delete old logo if it exists
       if (settings && settings.logo) {
         const oldPath = path.join(__dirname, '../../uploads', settings.logo);
         if (fs.existsSync(oldPath)) {

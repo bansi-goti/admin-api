@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const reviewController = require('../controllers/reviewController');
-const { protect } = require('../middlewares/authMiddleware');
+const {
+  seedDummyReviews, protect } = require('../middlewares/authMiddleware');
 
 // PUBLIC review routes
 router.get('/featured', reviewController.getFeaturedReviews);
@@ -9,6 +10,8 @@ router.get('/product/:productId', reviewController.getProductReviews);
 
 // Use protect middleware for protected review management routes
 router.use(protect);
+router.get('/check-pending', reviewController.checkUserPendingReviews);
+router.get('/my-reviews', reviewController.getUserReviews);
 
 // GET all reviews (with filters, pagination, stats)
 router.get('/all', reviewController.getAllReviews);

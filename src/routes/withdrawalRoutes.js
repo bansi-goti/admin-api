@@ -36,6 +36,12 @@ router.route('/')
   .get(withdrawalController.getWithdrawals)
   .post(withdrawalController.requestWithdrawal);
 
+router.route('/:id/status')
+  .put(withdrawalController.updateWithdrawalStatus);
+
+router.route('/:id')
+  .put(withdrawalController.updateWithdrawalStatus);
+
 /**
  * @swagger
  * /api/withdrawals/accounts:

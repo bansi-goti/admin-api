@@ -30,8 +30,19 @@ const getWishlist = async (req, res, next) => {
 const addToWishlist = async (req, res, next) => {
   try {
     const { productId } = req.body;
-
-    if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+    let targetProductId = productId;
+    if (typeof productId === 'string' && !mongoose.Types.ObjectId.isValid(productId)) {
+      const foundProd = await Product.findOne({
+        $or: [
+          { slug: productId },
+          { productId: productId },
+          { sku: productId },
+          { name: productId }
+        ]
+      });
+      if (foundProd) targetProductId = foundProd._id;
+    }
+    if (!targetProductId || !mongoose.Types.ObjectId.isValid(targetProductId)) {
       return res.status(400).json({ success: false, message: 'Valid productId is required' });
     }
 
@@ -45,7 +56,7 @@ const addToWishlist = async (req, res, next) => {
     if (!wishlistItem) {
       wishlistItem = await Wishlist.create({
         user: req.user._id,
-        product: productId,
+        product: targetProductId,
       });
     }
 
@@ -75,7 +86,22 @@ const toggleWishlist = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'productId is required' });
     }
 
-    const existing = await Wishlist.findOne({ user: req.user._id, product: productId });
+    let targetProductId = productId;
+    if (typeof productId === 'string' && !mongoose.Types.ObjectId.isValid(productId)) {
+      const foundProd = await Product.findOne({
+        $or: [
+          { slug: productId },
+          { productId: productId },
+          { sku: productId },
+          { name: productId }
+        ]
+      });
+      if (foundProd) {
+        targetProductId = foundProd._id;
+      }
+    }
+
+    const existing = await Wishlist.findOne({ user: req.user._id, product: targetProductId });
 
     if (existing) {
       await existing.deleteOne();
@@ -87,7 +113,7 @@ const toggleWishlist = async (req, res, next) => {
     } else {
       const created = await Wishlist.create({
         user: req.user._id,
-        product: productId,
+        product: targetProductId,
       });
       const populated = await Wishlist.findById(created._id).populate({
         path: 'product',

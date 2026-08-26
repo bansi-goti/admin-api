@@ -11,23 +11,58 @@ const calculateTrend = (current, previous) => {
 
 const getDetailedAnalytics = async (req, res, next) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { range, startDate, endDate } = req.query;
+    const now = new Date();
     
-    // Parse dates or default to 'This Month'
-    const currEnd = endDate ? new Date(endDate) : new Date();
-    const currStart = startDate ? new Date(startDate) : new Date(currEnd.getFullYear(), currEnd.getMonth(), 1);
-    
-    // Set End to 23:59:59
-    currEnd.setHours(23, 59, 59, 999);
-    currStart.setHours(0, 0, 0, 0);
+    let currStart, currEnd;
+
+    const isValidDate = (d) => d && !isNaN(new Date(d).getTime());
+
+    if (isValidDate(startDate) && isValidDate(endDate)) {
+      currStart = new Date(startDate);
+      currEnd = new Date(endDate);
+      currEnd.setHours(23, 59, 59, 999);
+      currStart.setHours(0, 0, 0, 0);
+    } else if (range === 'Weekly') {
+      const d = new Date(now);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      currStart = new Date(d.setDate(diff));
+      currStart.setHours(0, 0, 0, 0);
+      currEnd = new Date(currStart);
+      currEnd.setDate(currStart.getDate() + 6);
+      currEnd.setHours(23, 59, 59, 999);
+    } else if (range === 'Today') {
+      currStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      currEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (range === 'Yearly') {
+      currStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      currEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    } else {
+      // Default: 'This Month'
+      currStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      currEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
 
     // Calculate previous period for trends (same duration)
     const duration = currEnd.getTime() - currStart.getTime();
     const prevEnd = new Date(currStart.getTime() - 1);
     const prevStart = new Date(prevEnd.getTime() - duration);
 
-    const isAdmin = req.user.role === 'admin';
-    const orderQuery = isAdmin ? {} : { seller: req.user._id };
+    const userRole = req.user?.role || 'user';
+    const isAdmin = userRole === 'admin';
+    let orderQuery = {};
+    
+    if (!isAdmin && req.user?._id) {
+      const sellerProducts = await Product.find({ seller: req.user._id }).select('_id');
+      const prodIds = sellerProducts.map(p => p._id);
+      orderQuery = {
+        $or: [
+          { seller: req.user._id },
+          { 'items.product': { $in: prodIds } }
+        ]
+      };
+    }
 
     // Fetch Orders for Current and Previous Period
     const currentOrders = await Order.find({ 
@@ -84,26 +119,90 @@ const getDetailedAnalytics = async (req, res, next) => {
     // 2. TIME SERIES DATA (Revenue Overview & Sales Trend)
     const timeMap = {};
     const growthMap = {};
-    
-    // Group by Date for 'This Month' or similar ranges
-    currentOrders.forEach(o => {
+
+    if (range === 'Today') {
+      const slots = ['06:00 AM', '09:00 AM', '12:00 PM', '03:00 PM', '06:00 PM', '09:00 PM'];
+      slots.forEach(s => {
+        timeMap[s] = { date: s, revenue: 0, profit: 0, orders: 0 };
+        growthMap[s] = new Set();
+      });
+      currentOrders.forEach(o => {
+        const d = new Date(o.createdAt);
+        const hour = d.getHours();
+        let slot = '09:00 AM';
+        if (hour < 8) slot = '06:00 AM';
+        else if (hour < 11) slot = '09:00 AM';
+        else if (hour < 14) slot = '12:00 PM';
+        else if (hour < 17) slot = '03:00 PM';
+        else if (hour < 20) slot = '06:00 PM';
+        else slot = '09:00 PM';
+
+        const rev = (isAdmin ? o.totalAmount : (o.sellerEarning || (o.totalAmount * 0.85)));
+        const prof = (isAdmin ? (o.profit || 0) : (o.sellerEarning || (o.totalAmount * 0.85)));
+        timeMap[slot].revenue += rev;
+        timeMap[slot].profit += prof;
+        timeMap[slot].orders += 1;
+        if (o.customer?.email) growthMap[slot].add(o.customer.email);
+      });
+    } else if (range === 'Weekly') {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      days.forEach(d => {
+        timeMap[d] = { date: d, revenue: 0, profit: 0, orders: 0 };
+        growthMap[d] = new Set();
+      });
+      currentOrders.forEach(o => {
+        const d = new Date(o.createdAt);
+        const dayIdx = d.getDay();
+        const dayName = days[dayIdx === 0 ? 6 : dayIdx - 1];
+        const rev = (isAdmin ? o.totalAmount : (o.sellerEarning || (o.totalAmount * 0.85)));
+        const prof = (isAdmin ? (o.profit || 0) : (o.sellerEarning || (o.totalAmount * 0.85)));
+        timeMap[dayName].revenue += rev;
+        timeMap[dayName].profit += prof;
+        timeMap[dayName].orders += 1;
+        if (o.customer?.email) growthMap[dayName].add(o.customer.email);
+      });
+    } else if (range === 'Yearly') {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      months.forEach(m => {
+        timeMap[m] = { date: m, revenue: 0, profit: 0, orders: 0 };
+        growthMap[m] = new Set();
+      });
+      currentOrders.forEach(o => {
+        const d = new Date(o.createdAt);
+        const monthName = months[d.getMonth()];
+        const rev = (isAdmin ? o.totalAmount : (o.sellerEarning || (o.totalAmount * 0.85)));
+        const prof = (isAdmin ? (o.profit || 0) : (o.sellerEarning || (o.totalAmount * 0.85)));
+        timeMap[monthName].revenue += rev;
+        timeMap[monthName].profit += prof;
+        timeMap[monthName].orders += 1;
+        if (o.customer?.email) growthMap[monthName].add(o.customer.email);
+      });
+    } else {
+      // Monthly / Default
+      currentOrders.forEach(o => {
         const d = new Date(o.createdAt);
         const key = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-        
         if (!timeMap[key]) timeMap[key] = { date: key, revenue: 0, profit: 0, orders: 0 };
         if (!growthMap[key]) growthMap[key] = new Set();
-        
-        timeMap[key].revenue += (isAdmin ? o.totalAmount : (o.sellerEarning || (o.totalAmount * 0.85)));
-        timeMap[key].profit += (isAdmin ? (o.profit || 0) : (o.sellerEarning || (o.totalAmount * 0.85)));
+        const rev = (isAdmin ? o.totalAmount : (o.sellerEarning || (o.totalAmount * 0.85)));
+        const prof = (isAdmin ? (o.profit || 0) : (o.sellerEarning || (o.totalAmount * 0.85)));
+        timeMap[key].revenue += rev;
+        timeMap[key].profit += prof;
         timeMap[key].orders += 1;
-        
         if (o.customer?.email) growthMap[key].add(o.customer.email);
-    });
+      });
+      if (Object.keys(timeMap).length === 0) {
+        const n = new Date();
+        const k = n.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        timeMap[k] = { date: k, revenue: 0, profit: 0, orders: 0 };
+        growthMap[k] = new Set();
+      }
+    }
 
-    const timeSeriesData = Object.values(timeMap).sort((a,b) => new Date(a.date) - new Date(b.date));
+    const timeSeriesData = Object.values(timeMap);
     
     let cumulativeCustomers = 0;
-    const customerGrowthData = Object.keys(growthMap).sort((a,b) => new Date(a) - new Date(b)).map(key => {
+    const customerGrowthData = Object.keys(growthMap).map(key => {
         cumulativeCustomers += growthMap[key].size;
         return { date: key, count: cumulativeCustomers };
     });
@@ -128,13 +227,13 @@ const getDetailedAnalytics = async (req, res, next) => {
                 categorySales[catName] += (item.quantity * item.price);
 
                 // Top Products
-                const pid = item.product._id.toString();
+                const pid = item.product._id ? item.product._id.toString() : (item.product.id || 'p-1');
                 if (!productSales[pid]) {
                     productSales[pid] = {
                         id: pid,
                         name: item.product.name,
                         subtitle: catName,
-                        image: item.product.images?.[0] || 'https://via.placeholder.com/40',
+                        image: item.product.mainImage || item.product.images?.[0] || 'https://via.placeholder.com/40',
                         orders: 0,
                         sold: 0,
                         revenue: 0,
@@ -144,7 +243,7 @@ const getDetailedAnalytics = async (req, res, next) => {
                 productSales[pid].orders += 1;
                 productSales[pid].sold += item.quantity;
                 productSales[pid].revenue += (item.quantity * item.price);
-                productSales[pid].profit += (item.quantity * item.price * 0.3); // Rough estimate if not stored
+                productSales[pid].profit += (item.quantity * item.price * 0.3);
             }
         });
     });
