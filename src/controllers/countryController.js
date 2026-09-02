@@ -200,7 +200,7 @@ const updateCountry = async (req, res, next) => {
     country = await Country.findByIdAndUpdate(
       req.params.id,
       { name, status, currency },
-      { new: true, runValidators: true }
+      { new: true, returnDocument: 'after', runValidators: true }
     );
 
     res.status(200).json({

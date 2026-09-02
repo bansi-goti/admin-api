@@ -148,7 +148,7 @@ exports.updateReviewStatus = async (req, res) => {
       }
     }
 
-    review = await Review.findByIdAndUpdate(id, { status }, { new: true });
+    review = await Review.findByIdAndUpdate(id, { status }, { new: true, returnDocument: 'after' });
 
     res.status(200).json({ success: true, data: review });
   } catch (error) {

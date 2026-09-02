@@ -61,7 +61,7 @@ const updateGoogleAuthSettings = async (req, res, next) => {
       settings = await GoogleAuthSetting.findByIdAndUpdate(
         settings._id,
         updateData,
-        { new: true, runValidators: true }
+        { new: true, returnDocument: 'after', runValidators: true }
       );
     }
 

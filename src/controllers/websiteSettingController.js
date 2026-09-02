@@ -47,7 +47,7 @@ const getWebsiteSettings = async (req, res, next) => {
 // @access  Private
 const updateWebsiteSettings = async (req, res, next) => {
   try {
-    const { siteName, metaTitle, metaDescription, metaKeywords, supportEmail, address, googleClientId, googleClientSecret, isGoogleLoginEnabled, facebookUrl, instagramUrl, pinterestUrl, youtubeUrl, canonicalUrl, googleSiteVerification, googleAnalyticsId, robotsMeta } = req.body;
+    const { siteName, metaTitle, metaDescription, metaKeywords, supportEmail, address, googleClientId, googleClientSecret, isGoogleLoginEnabled, facebookUrl, instagramUrl, pinterestUrl, youtubeUrl, canonicalUrl, googleSiteVerification, googleAnalyticsId, robotsMeta, whatsappProvider, whatsappSenderNumber, whatsappApiKey, whatsappInstanceId, whatsappApiUrl, isWhatsappOtpEnabled, smtpHost, smtpPort, smtpUser, smtpPass, smtpFromName, isEmailOtpEnabled } = req.body;
     
     let settings = await WebsiteSetting.findOne();
     
@@ -71,6 +71,22 @@ const updateWebsiteSettings = async (req, res, next) => {
     if (googleAnalyticsId !== undefined) updateData.googleAnalyticsId = googleAnalyticsId;
     if (robotsMeta !== undefined) updateData.robotsMeta = robotsMeta;
 
+    
+    
+    if (smtpHost !== undefined) updateData.smtpHost = typeof smtpHost === 'string' ? smtpHost.trim() : smtpHost;
+    if (smtpPort !== undefined) updateData.smtpPort = Number(smtpPort) || 587;
+    if (smtpUser !== undefined) updateData.smtpUser = typeof smtpUser === 'string' ? smtpUser.trim() : smtpUser;
+    if (smtpPass !== undefined) updateData.smtpPass = typeof smtpPass === 'string' ? smtpPass.trim() : smtpPass;
+    if (smtpFromName !== undefined) updateData.smtpFromName = typeof smtpFromName === 'string' ? smtpFromName.trim() : smtpFromName;
+    if (isEmailOtpEnabled !== undefined) updateData.isEmailOtpEnabled = Boolean(isEmailOtpEnabled);
+  
+    if (whatsappProvider !== undefined) updateData.whatsappProvider = whatsappProvider;
+    if (whatsappSenderNumber !== undefined) updateData.whatsappSenderNumber = typeof whatsappSenderNumber === 'string' ? whatsappSenderNumber.trim() : whatsappSenderNumber;
+    if (whatsappApiKey !== undefined) updateData.whatsappApiKey = typeof whatsappApiKey === 'string' ? whatsappApiKey.trim() : whatsappApiKey;
+    if (whatsappInstanceId !== undefined) updateData.whatsappInstanceId = typeof whatsappInstanceId === 'string' ? whatsappInstanceId.trim() : whatsappInstanceId;
+    if (whatsappApiUrl !== undefined) updateData.whatsappApiUrl = typeof whatsappApiUrl === 'string' ? whatsappApiUrl.trim() : whatsappApiUrl;
+    if (isWhatsappOtpEnabled !== undefined) updateData.isWhatsappOtpEnabled = Boolean(isWhatsappOtpEnabled);
+  
     if (googleClientId !== undefined) updateData.googleClientId = typeof googleClientId === 'string' ? googleClientId.trim() : googleClientId;
     if (googleClientSecret !== undefined) updateData.googleClientSecret = typeof googleClientSecret === 'string' ? googleClientSecret.trim() : googleClientSecret;
     if (isGoogleLoginEnabled !== undefined) updateData.isGoogleLoginEnabled = Boolean(isGoogleLoginEnabled);
@@ -112,7 +128,7 @@ const updateWebsiteSettings = async (req, res, next) => {
       settings = await WebsiteSetting.findByIdAndUpdate(
         settings._id,
         updateData,
-        { new: true, runValidators: true }
+        { new: true, returnDocument: 'after', runValidators: true }
       );
     }
 

@@ -327,7 +327,7 @@ const updateCustomerStatus = async (req, res, next) => {
     const customer = await User.findOneAndUpdate(
       { _id: req.params.id, role: 'user' },
       { status },
-      { new: true, runValidators: true }
+      { new: true, returnDocument: 'after', runValidators: true }
     );
 
     if (!customer) {

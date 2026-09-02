@@ -70,6 +70,58 @@ const websiteSettingSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    
+    whatsappProvider: {
+      type: String,
+      default: 'ultramsg', // ultramsg | meta_cloud | twilio | custom
+    },
+    whatsappSenderNumber: {
+      type: String,
+      default: '',
+    },
+    whatsappApiKey: {
+      type: String,
+      default: '',
+    },
+    whatsappInstanceId: {
+      type: String,
+      default: '',
+    },
+    whatsappApiUrl: {
+      type: String,
+      default: '',
+    },
+    isWhatsappOtpEnabled: {
+      type: Boolean,
+      default: true,
+    },
+
+    
+    smtpHost: {
+      type: String,
+      default: '',
+    },
+    smtpPort: {
+      type: Number,
+      default: 587,
+    },
+    smtpUser: {
+      type: String,
+      default: '',
+    },
+    smtpPass: {
+      type: String,
+      default: '',
+    },
+    smtpFromName: {
+      type: String,
+      default: 'Nayzora Jewellery',
+    },
+    isEmailOtpEnabled: {
+      type: Boolean,
+      default: true,
+    },
+
     isGoogleLoginEnabled: {
       type: Boolean,
       default: true,

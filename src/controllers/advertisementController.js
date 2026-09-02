@@ -143,7 +143,7 @@ const updateAdvertisement = async (req, res, next) => {
     }
 
     const updatedAd = await Advertisement.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
+      new: true, returnDocument: 'after',
       runValidators: true,
     }).populate('product', 'name price images');
 

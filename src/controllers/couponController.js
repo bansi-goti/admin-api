@@ -225,7 +225,7 @@ const updateCoupon = async (req, res, next) => {
       products: appliesTo === 'Specific Product' ? (products || []) : [],
     };
 
-    coupon = await Coupon.findByIdAndUpdate(req.params.id, updateFields, { new: true, runValidators: true });
+    coupon = await Coupon.findByIdAndUpdate(req.params.id, updateFields, { new: true, returnDocument: 'after', runValidators: true });
     res.status(200).json({ success: true, data: coupon });
   } catch (error) {
     next(error);

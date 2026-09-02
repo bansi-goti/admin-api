@@ -1,3 +1,4 @@
+const { sendOrderNotification } = require('../services/notificationService');
 const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
@@ -157,6 +158,11 @@ const updateOrderStatus = async (req, res, next) => {
     order.status = status;
     const updatedOrder = await order.save();
 
+    // Trigger Order Status Notification (Email & WhatsApp)
+    sendOrderNotification({ order: updatedOrder, eventType: 'STATUS_UPDATE' }).catch(err => {
+      console.warn('Order status notification warning:', err.message);
+    });
+
     res.status(200).json({
       success: true,
       data: updatedOrder,
@@ -298,7 +304,7 @@ const createOrder = async (req, res, next) => {
         const reservedProduct = await Product.findOneAndUpdate(
           { _id: prodId, stock: { $gte: reqQty } },
           { $inc: { stock: -reqQty, sales: reqQty } },
-          { new: true }
+          { returnDocument: 'after' }
         );
 
         if (!reservedProduct) {
@@ -389,6 +395,7 @@ const createOrder = async (req, res, next) => {
       customer: {
         name: customer.name,
         email: customer.email || (req.user ? req.user.email : 'guest@nayzora.com'),
+        phone: customer.phone || customer.mobile || customer.contact || (req.user ? req.user.phone : ''),
         ...customer
       },
       items: sanitizedItems,
@@ -397,6 +404,11 @@ const createOrder = async (req, res, next) => {
       status: 'Processing',
       sellerEarning: calculatedSellerEarning,
       profit: calculatedProfit,
+    });
+
+    // Trigger Order Placed Notification (Email & WhatsApp)
+    sendOrderNotification({ order, eventType: 'PLACED' }).catch(err => {
+      console.warn('Order placed notification warning:', err.message);
     });
 
     res.status(201).json({

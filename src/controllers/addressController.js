@@ -104,7 +104,7 @@ const updateAddress = async (req, res, next) => {
         phone: phone || address.phone,
         isDefault: typeof isDefault === 'boolean' ? isDefault : address.isDefault,
       },
-      { new: true, runValidators: true }
+      { new: true, returnDocument: 'after', runValidators: true }
     );
 
     res.status(200).json({

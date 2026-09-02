@@ -65,7 +65,7 @@ const seedLocations = async (req, res, next) => {
       await Location.findOneAndUpdate(
         { state: loc.state },
         { state: loc.state, cities: loc.cities },
-        { upsert: true, new: true }
+        { upsert: true, new: true, returnDocument: 'after' }
       );
     }
 
